@@ -94,7 +94,7 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
 
   @override
   void initState() {
-    _pinnedServices = Pref.pinnedCDNServices;
+    _pinnedServices = Pref.pinnedCDNServices.toList();
     _services = VideoUtils.orderedCdnServices(pinned: _pinnedServices);
     _cdnSpeedTest = Pref.cdnSpeedTest;
     if (_cdnSpeedTest) {
