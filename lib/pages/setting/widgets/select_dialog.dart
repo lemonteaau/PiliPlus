@@ -13,6 +13,7 @@ import 'package:PiliPlus/utils/video_utils.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 class SelectDialog<T> extends StatelessWidget {
   final T? value;
@@ -162,8 +163,9 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
   }
 
   Future<void> _togglePinned(CDNService service) async {
+    final wasPinned = _pinnedServices.contains(service);
     setState(() {
-      if (_pinnedServices.contains(service)) {
+      if (wasPinned) {
         _pinnedServices.remove(service);
       } else {
         _pinnedServices.add(service);
@@ -173,6 +175,9 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
     await GStorage.setting.put(
       SettingBoxKey.pinnedCDNServices,
       _pinnedServices.map((item) => item.name).toList(),
+    );
+    SmartDialog.showToast(
+      wasPinned ? '已取消置顶 ${service.desc}' : '已置顶 ${service.desc}',
     );
   }
 
@@ -291,9 +296,11 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
                     mainAxisSize: MainAxisSize.min,
                     children: _services.map((service) {
                       final pinned = _pinnedServices.contains(service);
-                      return RadioListTile<CDNService>(
+                      return ListTile(
+                        key: ValueKey(service),
                         dense: true,
-                        value: service,
+                        onTap: () => Navigator.of(context).pop(service),
+                        leading: Radio<CDNService>(value: service),
                         title: Text(service.desc, style: titleMedium),
                         subtitle: _cdnSpeedTest
                             ? ValueListenableBuilder(
@@ -306,12 +313,13 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
                                 ),
                               )
                             : null,
-                        secondary: IconButton(
-                          tooltip: pinned ? '取消置顶' : '置顶',
+                        trailing: TextButton.icon(
                           onPressed: () => _togglePinned(service),
                           icon: Icon(
                             pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                            size: 18,
                           ),
+                          label: Text(pinned ? '已置顶' : '置顶'),
                         ),
                       );
                     }).toList(),
