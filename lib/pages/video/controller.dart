@@ -44,7 +44,7 @@ import 'package:PiliPlus/pages/video/medialist/view.dart';
 import 'package:PiliPlus/pages/video/note/view.dart';
 import 'package:PiliPlus/pages/video/post_panel/view.dart';
 import 'package:PiliPlus/pages/video/send_danmaku/view.dart';
-import 'package:PiliPlus/pages/video/widgets/cdn_stall_dialog.dart';
+import 'package:PiliPlus/pages/video/widgets/cdn_stall_toast.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
@@ -149,7 +149,7 @@ class VideoDetailController extends GetxController
   static const _cdnStallThreshold = Duration(seconds: 3);
   Timer? _cdnStallTimer;
   Worker? _bufferingWorker;
-  bool _cdnStallDialogVisible = false;
+  bool _cdnStallToastVisible = false;
 
   // 预设的解码格式
   late List<VideoDecodeFormatType> preferCodecs = Pref.preferCodecs;
@@ -405,7 +405,7 @@ class VideoDetailController extends GetxController
     _cdnStallTimer?.cancel();
     _cdnStallTimer = null;
     if (!buffering ||
-        _cdnStallDialogVisible ||
+        _cdnStallToastVisible ||
         !plPlayerController.playerStatus.isPlaying ||
         plPlayerController.positionInMilliseconds <= 0) {
       return;
@@ -416,7 +416,7 @@ class VideoDetailController extends GetxController
   Future<void> _handleCdnStall() async {
     _cdnStallTimer = null;
     if (isClosed ||
-        _cdnStallDialogVisible ||
+        _cdnStallToastVisible ||
         !plPlayerController.isBuffering.value ||
         !plPlayerController.playerStatus.isPlaying) {
       return;
@@ -424,18 +424,16 @@ class VideoDetailController extends GetxController
 
     final current = VideoUtils.cdnService;
     final next = VideoUtils.nextCdnService(current);
-    final context = Get.context;
-    if (next == null || context == null || !context.mounted) return;
+    if (next == null) return;
 
-    _cdnStallDialogVisible = true;
-    final decision = await showCdnStallDialog(
-      context: context,
-      current: current,
+    _cdnStallToastVisible = true;
+    final decision = await showCdnStallToast(
       next: next,
+      isFullScreen: isFullScreen,
     );
-    _cdnStallDialogVisible = false;
+    _cdnStallToastVisible = false;
 
-    if (isClosed || decision == null || decision == CdnStallDecision.cancel) {
+    if (isClosed || decision == CdnStallDecision.cancel) {
       return;
     }
     if (decision == CdnStallDecision.timedOut &&
