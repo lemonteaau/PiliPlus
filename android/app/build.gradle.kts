@@ -65,6 +65,7 @@ android {
             signingConfig = config ?: signingConfigs["debug"]
         }
         release {
+            versionNameSuffix = ".lemontea"
             if (project.hasProperty("dev")) {
                 applicationIdSuffix = ".dev"
                 resValue(
