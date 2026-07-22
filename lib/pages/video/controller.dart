@@ -44,6 +44,7 @@ import 'package:PiliPlus/pages/video/medialist/view.dart';
 import 'package:PiliPlus/pages/video/note/view.dart';
 import 'package:PiliPlus/pages/video/post_panel/view.dart';
 import 'package:PiliPlus/pages/video/send_danmaku/view.dart';
+import 'package:PiliPlus/pages/video/widgets/cdn_stall_dialog.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
@@ -60,6 +61,7 @@ import 'package:PiliPlus/utils/extension/size_ext.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
+import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
@@ -143,6 +145,11 @@ class VideoDetailController extends GetxController
   late final headerCtrKey = GlobalKey<TimeBatteryMixin>();
 
   Box setting = GStorage.setting;
+
+  static const _cdnStallThreshold = Duration(seconds: 5);
+  Timer? _cdnStallTimer;
+  Worker? _bufferingWorker;
+  bool _cdnStallDialogVisible = false;
 
   // 预设的解码格式
   late List<VideoDecodeFormatType> preferCodecs = Pref.preferCodecs;
@@ -380,11 +387,67 @@ class VideoDetailController extends GetxController
       getMediaList();
     }
 
+    if (!isFileSource) {
+      _bufferingWorker = ever<bool>(
+        plPlayerController.isBuffering,
+        _handleBufferingChange,
+      );
+    }
+
     tabCtr = TabController(
       length: 2,
       vsync: this,
       initialIndex: Pref.defaultShowComment ? 1 : 0,
     );
+  }
+
+  void _handleBufferingChange(bool buffering) {
+    _cdnStallTimer?.cancel();
+    _cdnStallTimer = null;
+    if (!buffering ||
+        _cdnStallDialogVisible ||
+        !plPlayerController.playerStatus.isPlaying ||
+        plPlayerController.positionInMilliseconds <= 0) {
+      return;
+    }
+    _cdnStallTimer = Timer(_cdnStallThreshold, _handleCdnStall);
+  }
+
+  Future<void> _handleCdnStall() async {
+    _cdnStallTimer = null;
+    if (isClosed ||
+        _cdnStallDialogVisible ||
+        !plPlayerController.isBuffering.value ||
+        !plPlayerController.playerStatus.isPlaying) {
+      return;
+    }
+
+    final current = VideoUtils.cdnService;
+    final next = VideoUtils.nextCdnService(current);
+    final context = Get.context;
+    if (next == null || context == null || !context.mounted) return;
+
+    _cdnStallDialogVisible = true;
+    final decision = await showCdnStallDialog(
+      context: context,
+      current: current,
+      next: next,
+    );
+    _cdnStallDialogVisible = false;
+
+    if (isClosed || decision == null || decision == CdnStallDecision.cancel) {
+      return;
+    }
+    if (decision == CdnStallDecision.timedOut &&
+        !plPlayerController.isBuffering.value) {
+      return;
+    }
+
+    playedTime = plPlayerController.videoPlayerController?.state.position;
+    VideoUtils.cdnService = next;
+    await setting.put(SettingBoxKey.CDNService, next.name);
+    SmartDialog.showToast('已自动切换到 ${next.desc}，正在重载视频');
+    await queryVideoUrl(fromReset: true);
   }
 
   Future<void> getMediaList({
@@ -1232,6 +1295,8 @@ class VideoDetailController extends GetxController
 
   @override
   void onClose() {
+    _cdnStallTimer?.cancel();
+    _bufferingWorker?.dispose();
     cid.close();
     if (isFileSource) {
       cacheLocalProgress();

@@ -10,6 +10,31 @@ abstract final class VideoUtils {
   static String? liveCdnUrl = Pref.liveCdnUrl;
   static bool disableAudioCDN = Pref.disableAudioCDN;
 
+  static List<CDNService> orderedCdnServices({
+    Iterable<CDNService>? pinned,
+  }) {
+    final pinnedServices = pinned ?? Pref.pinnedCDNServices;
+    return [
+      ...pinnedServices,
+      ...CDNService.values.where((item) => !pinnedServices.contains(item)),
+    ];
+  }
+
+  static CDNService? nextCdnService([CDNService? current]) {
+    current ??= cdnService;
+    final pinned = Pref.pinnedCDNServices;
+    if (pinned.length > 1 && pinned.contains(current)) {
+      return pinned[(pinned.indexOf(current) + 1) % pinned.length];
+    }
+    if (pinned.isNotEmpty && !pinned.contains(current)) {
+      return pinned.first;
+    }
+
+    const services = CDNService.values;
+    if (services.length < 2) return null;
+    return services[(services.indexOf(current) + 1) % services.length];
+  }
+
   static const _proxyTf = 'proxy-tf-all-ws.bilivideo.com';
 
   static final _mirrorRegex = RegExp(

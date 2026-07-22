@@ -6,6 +6,8 @@ import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/common/video/cdn_type.dart';
 import 'package:PiliPlus/models/common/video/video_type.dart';
 import 'package:PiliPlus/models/video/play/url.dart';
+import 'package:PiliPlus/utils/storage.dart';
+import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/video_utils.dart';
 import 'package:dio/dio.dart';
@@ -86,9 +88,13 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
   late final List<ValueNotifier<String?>> _cdnResList;
   late final List<CancelToken?> _tokens;
   late final bool _cdnSpeedTest;
+  late List<CDNService> _pinnedServices;
+  late List<CDNService> _services;
 
   @override
   void initState() {
+    _pinnedServices = Pref.pinnedCDNServices;
+    _services = VideoUtils.orderedCdnServices(pinned: _pinnedServices);
     _cdnSpeedTest = Pref.cdnSpeedTest;
     if (_cdnSpeedTest) {
       _dio =
@@ -149,10 +155,25 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
   }
 
   Future<void> _testAllCdnServices(BaseItem videoItem) async {
-    for (final item in CDNService.values) {
+    for (final item in _services) {
       if (!mounted) break;
       await _testSingleCdn(item, videoItem);
     }
+  }
+
+  Future<void> _togglePinned(CDNService service) async {
+    setState(() {
+      if (_pinnedServices.contains(service)) {
+        _pinnedServices.remove(service);
+      } else {
+        _pinnedServices.add(service);
+      }
+      _services = VideoUtils.orderedCdnServices(pinned: _pinnedServices);
+    });
+    await GStorage.setting.put(
+      SettingBoxKey.pinnedCDNServices,
+      _pinnedServices.map((item) => item.name).toList(),
+    );
   }
 
   Future<void> _testSingleCdn(CDNService item, BaseItem videoItem) async {
@@ -243,26 +264,64 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return SelectDialog<CDNService>(
-      title: 'CDN 设置',
-      values: CDNService.values.map((i) => (i, i.desc)).toList(),
-      value: VideoUtils.cdnService,
-      subtitleBuilder: _cdnSpeedTest
-          ? (context, index) {
-              final item = _cdnResList[index];
-              return ValueListenableBuilder(
-                valueListenable: item,
-                builder: (context, value, _) {
-                  return Text(
-                    value ?? '---',
-                    style: const TextStyle(fontSize: 13),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  );
-                },
-              );
-            }
-          : null,
+    final titleMedium = TextTheme.of(context).titleMedium!;
+    return AlertDialog(
+      clipBehavior: Clip.hardEdge,
+      title: const Text('CDN 设置'),
+      constraints: const BoxConstraints.tightFor(width: 360),
+      contentPadding: const EdgeInsets.only(top: 8, bottom: 12),
+      content: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text(
+                '点图钉可置顶常用 CDN；测速和卡顿自动切换会优先使用置顶项。',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                child: RadioGroup<CDNService>(
+                  onChanged: (value) => Navigator.of(context).pop(value),
+                  groupValue: VideoUtils.cdnService,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _services.map((service) {
+                      final pinned = _pinnedServices.contains(service);
+                      return RadioListTile<CDNService>(
+                        dense: true,
+                        value: service,
+                        title: Text(service.desc, style: titleMedium),
+                        subtitle: _cdnSpeedTest
+                            ? ValueListenableBuilder(
+                                valueListenable: _cdnResList[service.index],
+                                builder: (context, value, _) => Text(
+                                  value ?? '---',
+                                  style: const TextStyle(fontSize: 13),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              )
+                            : null,
+                        secondary: IconButton(
+                          tooltip: pinned ? '取消置顶' : '置顶',
+                          onPressed: () => _togglePinned(service),
+                          icon: Icon(
+                            pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
