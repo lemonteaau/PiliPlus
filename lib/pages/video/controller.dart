@@ -146,7 +146,7 @@ class VideoDetailController extends GetxController
 
   Box setting = GStorage.setting;
 
-  static const _cdnStallThreshold = Duration(seconds: 5);
+  static const _cdnStallThreshold = Duration(seconds: 3);
   Timer? _cdnStallTimer;
   Worker? _bufferingWorker;
   bool _cdnStallDialogVisible = false;

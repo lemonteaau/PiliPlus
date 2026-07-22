@@ -1,6 +1,9 @@
 name: Sync upstream and build custom apps
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
@@ -18,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_build: ${{ steps.sync.outputs.should_build }}
+      commit_sha: ${{ steps.sync.outputs.commit_sha }}
     steps:
       - name: Keep custom debug signing key available
         id: debug-signing-key
@@ -59,11 +63,12 @@ jobs:
           before="$(git rev-parse HEAD)"
           git merge --no-edit upstream/main
           after="$(git rev-parse HEAD)"
+          echo "commit_sha=$after" >> "$GITHUB_OUTPUT"
 
           if [ "$before" != "$after" ]; then
             git push origin HEAD:main
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          elif [ "${{ github.event_name }}" != "schedule" ]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
@@ -188,11 +193,34 @@ jobs:
           flutter build ios --release --no-codesign --dart-define-from-file=pili_release.json
           ln -sf ./build/ios/iphoneos Payload
           find Payload/Runner.app/Frameworks -type d -name "*.framework" -exec codesign --force --sign - --preserve-metadata=identifier,entitlements {} \;
-          zip -r9 PiliPlus-custom-unsigned.ipa Payload/Runner.app
+          zip -r9 PiliPlus-custom-ios-unsigned.ipa Payload/Runner.app
 
       - name: Upload iOS IPA
         uses: actions/upload-artifact@v7
         with:
           name: PiliPlus-custom-iOS-${{ github.run_number }}
-          path: PiliPlus-custom-unsigned.ipa
+          path: PiliPlus-custom-ios-unsigned.ipa
           if-no-files-found: error
+
+  release:
+    name: Publish custom release
+    needs: [sync, android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download app artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish fork release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ needs.sync.outputs.commit_sha }}
+        run: |
+          gh release create "custom-${GITHUB_RUN_NUMBER}" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$COMMIT_SHA" \
+            --title "PiliPlus custom build ${GITHUB_RUN_NUMBER}" \
+            --notes "Synced with upstream main and built with the pinned CDN auto-switch feature."
