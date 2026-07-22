@@ -146,14 +146,7 @@ jobs:
 
       - name: Build release APKs
         shell: bash
-        env:
-          SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
-        run: |
-          build_args=(--release --split-per-abi --dart-define-from-file=pili_release.json --pub)
-          if [ -z "$SIGN_KEYSTORE_BASE64" ]; then
-            build_args+=(--android-project-arg dev=1)
-          fi
-          flutter build apk "${build_args[@]}"
+        run: flutter build apk --release --split-per-abi --android-project-arg dev=1 --dart-define-from-file=pili_release.json --pub
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@v7
