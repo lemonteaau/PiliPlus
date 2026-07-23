@@ -35,9 +35,17 @@ abstract final class Update {
         return;
       }
       final data = res.data[0];
-      final int latest =
-          DateTime.parse(data['created_at']).millisecondsSinceEpoch ~/ 1000;
-      if (BuildConfig.buildTime >= latest) {
+      final String releaseName =
+          data['name'] is String && (data['name'] as String).isNotEmpty
+          ? data['name']
+          : '${data['tag_name']}';
+      final int? latestBuildCode = int.tryParse(releaseName.split('+').last);
+      final bool isLatest = latestBuildCode == null
+          ? BuildConfig.buildTime >=
+                DateTime.parse(data['created_at']).millisecondsSinceEpoch ~/
+                    1000
+          : BuildConfig.versionCode >= latestBuildCode;
+      if (isLatest) {
         if (!isAuto) {
           SmartDialog.showToast('已是最新版本');
         }
@@ -59,7 +67,7 @@ abstract final class Update {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${data['tag_name']}',
+                        releaseName,
                         style: const TextStyle(fontSize: 20),
                       ),
                       const SizedBox(height: 8),

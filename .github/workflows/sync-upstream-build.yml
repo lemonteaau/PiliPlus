@@ -22,6 +22,9 @@ jobs:
     outputs:
       should_build: ${{ steps.sync.outputs.should_build }}
       commit_sha: ${{ steps.sync.outputs.commit_sha }}
+      release_tag: ${{ steps.sync.outputs.release_tag }}
+      release_version: ${{ steps.sync.outputs.release_version }}
+      upstream_release_tag: ${{ steps.sync.outputs.upstream_release_tag }}
     steps:
       - name: Keep custom debug signing key available
         id: debug-signing-key
@@ -54,21 +57,39 @@ jobs:
       - name: Merge upstream updates
         id: sync
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/bggRGjQaUbCoE/PiliPlus.git
           git fetch upstream main
 
+          upstream_release_tag="$(gh api repos/bggRGjQaUbCoE/PiliPlus/releases/latest --jq .tag_name)"
           before="$(git rev-parse HEAD)"
           git merge --no-edit upstream/main
           after="$(git rev-parse HEAD)"
+
+          version_name="$(sed -nE 's/^version:[[:space:]]*([0-9.]+).*/\1/p' pubspec.yaml | head -n 1)"
+          version_code="$(git rev-list --count HEAD)"
+          release_version="${version_name}.lemontea+${version_code}"
+          release_tag="lemontea-${upstream_release_tag}-${GITHUB_RUN_NUMBER}"
+
           echo "commit_sha=$after" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "upstream_release_tag=$upstream_release_tag" >> "$GITHUB_OUTPUT"
 
           if [ "$before" != "$after" ]; then
             git push origin HEAD:main
-            echo "should_build=true" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" != "schedule" ]; then
+          fi
+
+          existing_release="$(
+            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[].tag_name' |
+              grep -F -m 1 "lemontea-${upstream_release_tag}-" || true
+          )"
+
+          if [ "${{ github.event_name }}" != "schedule" ] || [ -z "$existing_release" ]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
@@ -218,9 +239,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           COMMIT_SHA: ${{ needs.sync.outputs.commit_sha }}
+          RELEASE_TAG: ${{ needs.sync.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.sync.outputs.release_version }}
+          UPSTREAM_RELEASE_TAG: ${{ needs.sync.outputs.upstream_release_tag }}
         run: |
-          gh release create "custom-${GITHUB_RUN_NUMBER}" release-assets/* \
+          gh release create "$RELEASE_TAG" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$COMMIT_SHA" \
-            --title "PiliPlus custom build ${GITHUB_RUN_NUMBER}" \
-            --notes "Synced with upstream main and built with the pinned CDN auto-switch feature."
+            --title "$RELEASE_VERSION" \
+            --notes "Based on upstream release ${UPSTREAM_RELEASE_TAG}. Includes the pinned CDN auto-switch feature."
