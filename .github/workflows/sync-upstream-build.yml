@@ -26,28 +26,6 @@ jobs:
       release_version: ${{ steps.sync.outputs.release_version }}
       upstream_release_tag: ${{ steps.sync.outputs.upstream_release_tag }}
     steps:
-      - name: Keep custom debug signing key available
-        id: debug-signing-key
-        uses: actions/cache@v5
-        with:
-          path: ~/.android/debug.keystore
-          key: piliplus-custom-debug-signing-v1
-
-      - name: Create custom debug signing key
-        if: steps.debug-signing-key.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          mkdir -p "$HOME/.android"
-          keytool -genkeypair -v \
-            -keystore "$HOME/.android/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=PiliPlus Custom Debug,O=lemonteaau,C=AU"
-
       - name: Checkout fork main
         uses: actions/checkout@v7
         with:
@@ -124,28 +102,6 @@ jobs:
           flutter-version-file: pubspec.yaml
           cache: true
 
-      - name: Restore stable custom debug signing key
-        id: debug-signing-key
-        uses: actions/cache@v5
-        with:
-          path: ~/.android/debug.keystore
-          key: piliplus-custom-debug-signing-v1
-
-      - name: Create custom debug signing key if needed
-        if: steps.debug-signing-key.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          mkdir -p "$HOME/.android"
-          keytool -genkeypair -v \
-            -keystore "$HOME/.android/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=PiliPlus Custom Debug,O=lemonteaau,C=AU"
-
       - name: Apply project Flutter patches
         shell: pwsh
         run: lib/scripts/patch.ps1 android
@@ -162,13 +118,15 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -n "$SIGN_KEYSTORE_BASE64" ]; then
-            echo "$SIGN_KEYSTORE_BASE64" | base64 --decode > android/app/key.jks
-            echo "storeFile=key.jks" >> android/key.properties
-            echo "storePassword=$KEYSTORE_PASSWORD" >> android/key.properties
-            echo "keyAlias=$KEY_ALIAS" >> android/key.properties
-            echo "keyPassword=$KEY_PASSWORD" >> android/key.properties
+          if [ -z "$SIGN_KEYSTORE_BASE64" ]; then
+            echo "::error::SIGN_KEYSTORE_BASE64 secret is missing. Building without it produces a random signature and every update conflicts with the installed app. Set the signing secrets (see piliplus-fork-keys/set-secrets.sh) and re-run."
+            exit 1
           fi
+          echo "$SIGN_KEYSTORE_BASE64" | base64 --decode > android/app/key.jks
+          echo "storeFile=key.jks" >> android/key.properties
+          echo "storePassword=$KEYSTORE_PASSWORD" >> android/key.properties
+          echo "keyAlias=$KEY_ALIAS" >> android/key.properties
+          echo "keyPassword=$KEY_PASSWORD" >> android/key.properties
 
       - name: Build release APKs
         shell: bash
