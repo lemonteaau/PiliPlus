@@ -48,6 +48,7 @@ import 'package:PiliPlus/pages/video/widgets/cdn_stall_toast.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
+import 'package:PiliPlus/plugin/pl_player/models/data_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/heart_beat_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
@@ -147,9 +148,13 @@ class VideoDetailController extends GetxController
   Box setting = GStorage.setting;
 
   static const _cdnStallThreshold = Duration(seconds: 3);
+  static const _cdnInitialLoadThreshold = Duration(seconds: 5);
   Timer? _cdnStallTimer;
   Worker? _bufferingWorker;
+  Worker? _playerStatusWorker;
   bool _cdnStallToastVisible = false;
+  int _cdnAutoSwitchCount = 0;
+  Duration? _lastInitSeek;
 
   // 预设的解码格式
   late List<VideoDecodeFormatType> preferCodecs = Pref.preferCodecs;
@@ -392,6 +397,10 @@ class VideoDetailController extends GetxController
         plPlayerController.isBuffering,
         _handleBufferingChange,
       );
+      _playerStatusWorker = ever(
+        plPlayerController.playerStatus,
+        (_) => _rescheduleCdnStallCheck(),
+      );
     }
 
     tabCtr = TabController(
@@ -402,30 +411,51 @@ class VideoDetailController extends GetxController
   }
 
   void _handleBufferingChange(bool buffering) {
+    if (!buffering && plPlayerController.dataStatus.loaded) {
+      // 播放恢复，重置自动切换预算
+      _cdnAutoSwitchCount = 0;
+    }
+    _rescheduleCdnStallCheck();
+  }
+
+  // 卡顿判定：正在缓冲，且（播放中）或（首帧前但带播放意图）；
+  // isBuffering/playerStatus 任一变化都重新评估，避免事件顺序导致漏判
+  void _rescheduleCdnStallCheck() {
     _cdnStallTimer?.cancel();
     _cdnStallTimer = null;
-    if (!buffering ||
-        _cdnStallToastVisible ||
-        !plPlayerController.playerStatus.isPlaying ||
-        plPlayerController.positionInMilliseconds <= 0) {
+    if (_cdnStallToastVisible || !plPlayerController.isBuffering.value) {
       return;
     }
-    _cdnStallTimer = Timer(_cdnStallThreshold, _handleCdnStall);
+    final initialLoad = plPlayerController.positionInMilliseconds <= 0;
+    if (!plPlayerController.playerStatus.isPlaying &&
+        !(initialLoad && _autoPlay.value)) {
+      return;
+    }
+    _cdnStallTimer = Timer(
+      initialLoad ? _cdnInitialLoadThreshold : _cdnStallThreshold,
+      _handleCdnStall,
+    );
   }
 
   Future<void> _handleCdnStall() async {
     _cdnStallTimer = null;
-    if (isClosed ||
-        _cdnStallToastVisible ||
-        !plPlayerController.isBuffering.value ||
-        !plPlayerController.playerStatus.isPlaying) {
+    if (isClosed || _cdnStallToastVisible || isQuerying) return;
+    final plCtr = plPlayerController;
+    if (!plCtr.isBuffering.value) return;
+    final initialLoad = plCtr.positionInMilliseconds <= 0;
+    if (!plCtr.playerStatus.isPlaying && !(initialLoad && _autoPlay.value)) {
       return;
     }
 
     final current = VideoUtils.cdnService;
     final next = VideoUtils.nextCdnService(current);
     if (next == null) return;
+    if (_cdnAutoSwitchCount >= VideoUtils.cdnRotation.length) {
+      // 一轮全部切过仍未恢复，不再打扰
+      return;
+    }
 
+    final stallCid = cid.value;
     _cdnStallToastVisible = true;
     final decision = await showCdnStallToast(
       next: next,
@@ -433,18 +463,29 @@ class VideoDetailController extends GetxController
     );
     _cdnStallToastVisible = false;
 
-    if (isClosed || decision == CdnStallDecision.cancel) {
+    if (isClosed ||
+        cid.value != stallCid ||
+        isQuerying ||
+        decision == CdnStallDecision.cancel) {
       return;
     }
     if (decision == CdnStallDecision.timedOut &&
-        !plPlayerController.isBuffering.value) {
+        !plCtr.isBuffering.value) {
       return;
     }
 
-    playedTime = plPlayerController.videoPlayerController?.state.position;
+    _cdnAutoSwitchCount++;
+    final state = plCtr.videoPlayerController?.state;
+    if (state == null || state.duration == Duration.zero) {
+      // 文件尚未打开成功（首帧前卡死），保留本次加载原定的起播位置
+      defaultST ??= _lastInitSeek;
+    } else {
+      playedTime = state.position;
+    }
     VideoUtils.cdnService = next;
     await setting.put(SettingBoxKey.CDNService, next.name);
     SmartDialog.showToast('已自动切换到 ${next.desc}，正在重载视频');
+    _autoPlay.value = true;
     await queryVideoUrl(fromReset: true);
   }
 
@@ -780,6 +821,7 @@ class VideoDetailController extends GetxController
     Duration? seek = defaultST ?? playedTime;
     if (seek == .zero) seek = null;
     seek ??= getFirstSegment();
+    _lastInitSeek = seek;
     await plPlayerController.setDataSource(
       isFileSource
           ? FileSource(
@@ -1295,6 +1337,7 @@ class VideoDetailController extends GetxController
   void onClose() {
     _cdnStallTimer?.cancel();
     _bufferingWorker?.dispose();
+    _playerStatusWorker?.dispose();
     cid.close();
     if (isFileSource) {
       cacheLocalProgress();
@@ -1315,6 +1358,11 @@ class VideoDetailController extends GetxController
     if (isFileSource) {
       cacheLocalProgress();
     }
+
+    _cdnStallTimer?.cancel();
+    _cdnStallTimer = null;
+    _cdnAutoSwitchCount = 0;
+    _lastInitSeek = null;
 
     playedTime = null;
     defaultST = null;
