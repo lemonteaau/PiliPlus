@@ -49,7 +49,6 @@ import 'package:PiliPlus/pages/video/widgets/cdn_stall_toast.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
-import 'package:PiliPlus/plugin/pl_player/models/data_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/heart_beat_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
@@ -150,12 +149,20 @@ class VideoDetailController extends GetxController
 
   static const _cdnStallThreshold = Duration(seconds: 3);
   static const _cdnInitialLoadThreshold = Duration(seconds: 5);
+  static const _videoFreezeSampleInterval = Duration(milliseconds: 1500);
+  static const _videoFreezeStuckSamples = 3;
+  static const _healthySamplesToResetBudget = 20;
   Timer? _cdnStallTimer;
+  Timer? _videoFreezeTimer;
   Worker? _bufferingWorker;
   Worker? _playerStatusWorker;
   bool _cdnAutoSwitchDisabled = false;
   int _cdnAutoSwitchCount = 0;
   Duration? _lastInitSeek;
+  String? _lastVideoPts;
+  int _lastFreezePosMs = -1;
+  int _videoPtsStuck = 0;
+  int _healthyStreak = 0;
 
   // 预设的解码格式
   late List<VideoDecodeFormatType> preferCodecs = Pref.preferCodecs;
@@ -396,12 +403,16 @@ class VideoDetailController extends GetxController
     if (!isFileSource) {
       _bufferingWorker = ever<bool>(
         plPlayerController.isBuffering,
-        _handleBufferingChange,
+        (_) => _rescheduleCdnStallCheck(),
       );
       _playerStatusWorker = ever(
         plPlayerController.playerStatus,
-        (_) => _rescheduleCdnStallCheck(),
+        (_) {
+          _rescheduleCdnStallCheck();
+          _syncVideoFreezeSampler();
+        },
       );
+      _syncVideoFreezeSampler();
     }
 
     tabCtr = TabController(
@@ -411,12 +422,70 @@ class VideoDetailController extends GetxController
     );
   }
 
-  void _handleBufferingChange(bool buffering) {
-    if (!buffering && plPlayerController.dataStatus.loaded) {
-      // 播放恢复，重置自动切换预算
-      _cdnAutoSwitchCount = 0;
+  void _syncVideoFreezeSampler() {
+    if (plPlayerController.playerStatus.isPlaying) {
+      _videoFreezeTimer ??= Timer.periodic(
+        _videoFreezeSampleInterval,
+        (_) => _sampleVideoFreeze(),
+      );
+    } else {
+      _videoFreezeTimer?.cancel();
+      _videoFreezeTimer = null;
+      _resetFreezeSamples();
     }
-    _rescheduleCdnStallCheck();
+  }
+
+  void _resetFreezeSamples() {
+    _videoPtsStuck = 0;
+    _lastVideoPts = null;
+    _lastFreezePosMs = -1;
+  }
+
+  // 画面冻结检测：进度/声音在走而 video-pts 不动。视频流单独断开时
+  // 播放器不会进 buffering，常规卡顿检测发现不了这种情况
+  void _sampleVideoFreeze() {
+    final plCtr = plPlayerController;
+    final player = plCtr.videoPlayerController;
+    if (player == null ||
+        isQuerying ||
+        _cdnAutoSwitchDisabled ||
+        !plCtr.visible ||
+        !plCtr.playerStatus.isPlaying ||
+        plCtr.isBuffering.value ||
+        plCtr.isSeeking.value ||
+        plCtr.onlyPlayAudio.value) {
+      _resetFreezeSamples();
+      return;
+    }
+
+    final posMs = player.state.position.inMilliseconds;
+    final advanced = _lastFreezePosMs >= 0 && posMs > _lastFreezePosMs;
+    final String pts;
+    try {
+      pts = player.getProperty('video-pts');
+    } catch (_) {
+      return;
+    }
+    final frozen = pts.isNotEmpty && pts == _lastVideoPts;
+    _lastFreezePosMs = posMs;
+    if (pts.isNotEmpty) {
+      _lastVideoPts = pts;
+    }
+
+    if (frozen && advanced) {
+      _healthyStreak = 0;
+      if (++_videoPtsStuck >= _videoFreezeStuckSamples) {
+        _videoPtsStuck = 0;
+        _performCdnSwitch();
+      }
+    } else {
+      _videoPtsStuck = 0;
+      if (advanced && ++_healthyStreak >= _healthySamplesToResetBudget) {
+        // 播放持续健康，恢复自动切换预算
+        _healthyStreak = 0;
+        _cdnAutoSwitchCount = 0;
+      }
+    }
   }
 
   // 卡顿判定：正在缓冲，且（播放中）或（首帧前但带播放意图）；
@@ -440,13 +509,17 @@ class VideoDetailController extends GetxController
 
   Future<void> _handleCdnStall() async {
     _cdnStallTimer = null;
-    if (isClosed || _cdnAutoSwitchDisabled || isQuerying) return;
     final plCtr = plPlayerController;
     if (!plCtr.isBuffering.value) return;
     final initialLoad = plCtr.positionInMilliseconds <= 0;
     if (!plCtr.playerStatus.isPlaying && !(initialLoad && _autoPlay.value)) {
       return;
     }
+    await _performCdnSwitch();
+  }
+
+  Future<void> _performCdnSwitch() async {
+    if (isClosed || _cdnAutoSwitchDisabled || isQuerying) return;
 
     final current = VideoUtils.cdnService;
     final next = VideoUtils.nextCdnService(current);
@@ -457,6 +530,7 @@ class VideoDetailController extends GetxController
     }
 
     _cdnAutoSwitchCount++;
+    _healthyStreak = 0;
     final stallCid = cid.value;
     showCdnSwitchedToast(
       next: next,
@@ -1338,6 +1412,7 @@ class VideoDetailController extends GetxController
   @override
   void onClose() {
     _cdnStallTimer?.cancel();
+    _videoFreezeTimer?.cancel();
     _bufferingWorker?.dispose();
     _playerStatusWorker?.dispose();
     cid.close();
@@ -1366,6 +1441,8 @@ class VideoDetailController extends GetxController
     _cdnAutoSwitchCount = 0;
     _cdnAutoSwitchDisabled = false;
     _lastInitSeek = null;
+    _healthyStreak = 0;
+    _resetFreezeSamples();
 
     playedTime = null;
     defaultST = null;
