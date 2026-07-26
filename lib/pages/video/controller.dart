@@ -149,6 +149,8 @@ class VideoDetailController extends GetxController
 
   static const _cdnStallThreshold = Duration(seconds: 3);
   static const _cdnInitialLoadThreshold = Duration(seconds: 5);
+  static const _cdnSeekStallThreshold = Duration(seconds: 8);
+  static const _cdnPostSeekWindow = Duration(seconds: 10);
   static const _videoFreezeSampleInterval = Duration(milliseconds: 1500);
   static const _videoFreezeStuckSamples = 3;
   static const _healthySamplesToResetBudget = 20;
@@ -448,6 +450,7 @@ class VideoDetailController extends GetxController
     final player = plCtr.videoPlayerController;
     if (player == null ||
         isQuerying ||
+        plCtr.processing ||
         _cdnAutoSwitchDisabled ||
         !plCtr.visible ||
         !plCtr.playerStatus.isPlaying ||
@@ -488,6 +491,12 @@ class VideoDetailController extends GetxController
     }
   }
 
+  // seek 后短时间内的缓冲是正常回填，不能按播放中卡顿的阈值判定
+  bool get _isRecentSeek {
+    final at = plPlayerController.lastSeekAt;
+    return at != null && DateTime.now().difference(at) < _cdnPostSeekWindow;
+  }
+
   // 卡顿判定：正在缓冲，且（播放中）或（首帧前但带播放意图）；
   // isBuffering/playerStatus 任一变化都重新评估，避免事件顺序导致漏判
   void _rescheduleCdnStallCheck() {
@@ -502,7 +511,11 @@ class VideoDetailController extends GetxController
       return;
     }
     _cdnStallTimer = Timer(
-      initialLoad ? _cdnInitialLoadThreshold : _cdnStallThreshold,
+      initialLoad
+          ? _cdnInitialLoadThreshold
+          : _isRecentSeek
+          ? _cdnSeekStallThreshold
+          : _cdnStallThreshold,
       _handleCdnStall,
     );
   }
@@ -511,6 +524,22 @@ class VideoDetailController extends GetxController
     _cdnStallTimer = null;
     final plCtr = plPlayerController;
     if (!plCtr.isBuffering.value) return;
+    if (plCtr.isSeeking.value) {
+      // 用户还在拖进度条，等松手后重新计时
+      _rescheduleCdnStallCheck();
+      return;
+    }
+    if (plCtr.lastSeekAt case final lastSeekAt?) {
+      // 计时器可能是按普通阈值armed的，seek 发生在缓冲途中时补足宽限期
+      final sinceSeek = DateTime.now().difference(lastSeekAt);
+      if (sinceSeek < _cdnSeekStallThreshold) {
+        _cdnStallTimer = Timer(
+          _cdnSeekStallThreshold - sinceSeek,
+          _handleCdnStall,
+        );
+        return;
+      }
+    }
     final initialLoad = plCtr.positionInMilliseconds <= 0;
     if (!plCtr.playerStatus.isPlaying && !(initialLoad && _autoPlay.value)) {
       return;
@@ -519,7 +548,13 @@ class VideoDetailController extends GetxController
   }
 
   Future<void> _performCdnSwitch() async {
-    if (isClosed || _cdnAutoSwitchDisabled || isQuerying) return;
+    if (isClosed ||
+        _cdnAutoSwitchDisabled ||
+        isQuerying ||
+        plPlayerController.processing ||
+        plPlayerController.isSeeking.value) {
+      return;
+    }
 
     final current = VideoUtils.cdnService;
     final next = VideoUtils.nextCdnService(current);
