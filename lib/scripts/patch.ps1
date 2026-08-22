@@ -234,15 +234,15 @@ switch ($platform.ToLower()) {
     default {}
 }
 
-try {
-    $MaterialUiDir = Get-ChildItem "$PubCacheDir/hosted/pub.dev" -Directory |
-        Where-Object { $_.Name -like "material_ui-*" } |
-        Select-Object -Last 1
-
-    if ($MaterialUiDir) {
-        Remove-Item -Path $MaterialUiDir.FullName -Recurse -Force
+foreach ($packagePattern in @("material_ui-*", "cupertino_ui-*")) {
+    try {
+        Get-ChildItem "$PubCacheDir/hosted/pub.dev" -Directory |
+            Where-Object { $_.Name -like $packagePattern } |
+            ForEach-Object {
+                Remove-Item -Path $_.FullName -Recurse -Force
+            }
+    } catch {
     }
-} catch {
 }
 
 flutter pub get
