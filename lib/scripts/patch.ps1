@@ -118,6 +118,14 @@ if ($platform.ToLower() -eq "ios") {
 
 Set-Location $env:FLUTTER_ROOT
 
+# The Flutter SDK directory is cached by CI after this script modifies it.
+# Always restore the checkout before applying patches so a cache hit does not
+# try to apply the same patches to an already-patched SDK.
+git reset --hard HEAD
+if ($LASTEXITCODE -ne 0) {
+    throw "$LASTEXITCODE"
+}
+
 $picks   = @()
 $reverts = @()
 $patches = @($ModalBarrierPatch, $TextSelectionPatch, $MouseCursorPatch,
@@ -133,8 +141,6 @@ switch ($platform.ToLower()) {
         $patches += $BottomSheetAndroidPatch
         $patches += $ScrollViewPatch
         $patches += $NavigatorPatch
-
-        git reset --hard HEAD
     }
     "ios" {
         $patches += $ScrollViewPatch
@@ -142,7 +148,6 @@ switch ($platform.ToLower()) {
         $patches += $NavigatorPatch
     }
     "linux" {
-        git reset --hard HEAD
     }
     "macos" {
     }
