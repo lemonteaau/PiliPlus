@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:PiliPlus/build_config.dart';
@@ -112,8 +113,12 @@ void main() async {
     ..lazyPut(DownloadService.new);
   HttpOverrides.global = _CustomHttpOverrides();
 
-  if (PlatformUtils.isMobile) {
-    if (Platform.isAndroid) MaxScreenSize.init();
+  if (Platform.isAndroid) {
+    MaxScreenSize.init();
+    // AudioService may start this Flutter engine before an Activity is
+    // attached. Keep its initialization off the UI startup critical path.
+    unawaited(_setupAndroidServices());
+  } else if (PlatformUtils.isMobile) {
     await Future.wait([
       if (Pref.horizontalScreen) ?fullMode() else ?portraitUpMode(),
       setupServiceLocator(),
@@ -136,7 +141,9 @@ void main() async {
 
   SmartDialog.config.toast = SmartConfigToast(displayType: .onlyRefresh);
 
-  if (PlatformUtils.isMobile) {
+  if (Platform.isAndroid) {
+    _observeAndroidActivity();
+  } else if (PlatformUtils.isMobile) {
     SystemChrome.setEnabledSystemUIMode(.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -146,22 +153,7 @@ void main() async {
         systemNavigationBarContrastEnforced: false,
       ),
     );
-    if (Platform.isAndroid) {
-      FlutterDisplayMode.supported.then((mode) {
-        final String? storageDisplay = GStorage.setting.get(
-          SettingBoxKey.displayMode,
-        );
-        DisplayMode? displayMode;
-        if (storageDisplay != null) {
-          displayMode = mode.firstWhereOrNull(
-            (e) => e.toString() == storageDisplay,
-          );
-        }
-        FlutterDisplayMode.setPreferredMode(displayMode ?? DisplayMode.auto);
-      });
-    } else {
-      ScreenBrightnessPlatform.instance.setAutoReset(false);
-    }
+    ScreenBrightnessPlatform.instance.setAutoReset(false);
   } else if (PlatformUtils.isDesktop) {
     FocusManager.instance.addEarlyKeyEventHandler(_onKeyEvent);
 
@@ -211,6 +203,66 @@ void main() async {
     );
   } else {
     runApp(const MyApp());
+  }
+}
+
+final _androidActivityObserver = _AndroidActivityObserver();
+
+void _observeAndroidActivity() {
+  WidgetsBinding.instance.addObserver(_androidActivityObserver);
+  if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+    _applyAndroidActivitySettings();
+  }
+}
+
+void _applyAndroidActivitySettings() {
+  unawaited(_applyAndroidActivitySettingsAsync());
+}
+
+Future<void> _applyAndroidActivitySettingsAsync() async {
+  try {
+    final orientationFuture = Pref.horizontalScreen
+        ? fullMode()
+        : portraitUpMode();
+    if (orientationFuture != null) await orientationFuture;
+
+    await SystemChrome.setEnabledSystemUIMode(.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        statusBarColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
+
+    final modes = await FlutterDisplayMode.supported;
+    final String? storageDisplay = GStorage.setting.get(
+      SettingBoxKey.displayMode,
+    );
+    final displayMode = storageDisplay == null
+        ? null
+        : modes.firstWhereOrNull((mode) => mode.toString() == storageDisplay);
+    await FlutterDisplayMode.setPreferredMode(displayMode ?? DisplayMode.auto);
+  } catch (e) {
+    if (kDebugMode) debugPrint('Android activity settings error: $e');
+  }
+}
+
+Future<void> _setupAndroidServices() async {
+  try {
+    await setupServiceLocator();
+  } catch (e) {
+    if (kDebugMode) debugPrint('Android services init error: $e');
+  }
+}
+
+class _AndroidActivityObserver extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _applyAndroidActivitySettings();
+    }
   }
 }
 

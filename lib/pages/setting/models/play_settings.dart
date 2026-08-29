@@ -222,7 +222,7 @@ List<SettingsModel> get playSettings => [
       setKey: SettingBoxKey.autoPiP,
       defaultVal: false,
       onChanged: (val) {
-        if (val && !videoPlayerServiceHandler!.enableBackgroundPlay) {
+        if (val && videoPlayerServiceHandler?.enableBackgroundPlay == false) {
           SmartDialog.showToast('建议开启后台音频服务');
         }
       },
@@ -278,7 +278,7 @@ List<SettingsModel> get playSettings => [
       setKey: SettingBoxKey.enableBackgroundPlay,
       defaultVal: true,
       onChanged: (value) =>
-          videoPlayerServiceHandler!.enableBackgroundPlay = value,
+          videoPlayerServiceHandler?.enableBackgroundPlay = value,
     ),
   PopupModel(
     title: '播放顺序',
