@@ -36,8 +36,9 @@ Future<void>? _setPreferredOrientations(List<DeviceOrientation> orientations) {
   if (_lastOrientation == orientations) {
     return null;
   }
-  _lastOrientation = orientations;
-  return SystemChrome.setPreferredOrientations(orientations);
+  return SystemChrome.setPreferredOrientations(orientations).then((_) {
+    _lastOrientation = orientations;
+  });
 }
 
 Future<void>? portraitUpMode() {
