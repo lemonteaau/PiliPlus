@@ -161,10 +161,12 @@ class VideoDetailController extends GetxController
   Timer? _videoFreezeTimer;
   Worker? _bufferingWorker;
   Worker? _playerStatusWorker;
+  Completer<void>? _cdnSwitchCompleter;
   bool _cdnAutoSwitchDisabled = false;
   int _cdnAutoSwitchCount = 0;
+  int _cdnSession = 0;
   Duration? _lastInitSeek;
-  String? _lastVideoPts;
+  double? _lastVideoPts;
   int _lastFreezePosMs = -1;
   int _videoPtsStuck = 0;
   int _healthyStreak = 0;
@@ -447,6 +449,13 @@ class VideoDetailController extends GetxController
     _lastFreezePosMs = -1;
   }
 
+  bool _isCurrentCdnSession(int session, int expectedCid) {
+    return !isClosed &&
+        _cdnSession == session &&
+        cid.value == expectedCid &&
+        plPlayerController.cid == expectedCid;
+  }
+
   // 画面冻结检测：进度/声音在走而 video-pts 不动。视频流单独断开时
   // 播放器不会进 buffering，常规卡顿检测发现不了这种情况
   void _sampleVideoFreeze() {
@@ -456,6 +465,7 @@ class VideoDetailController extends GetxController
         isQuerying ||
         plCtr.processing ||
         _cdnAutoSwitchDisabled ||
+        plCtr.cid != cid.value ||
         !plCtr.visible ||
         !plCtr.playerStatus.isPlaying ||
         plCtr.isBuffering.value ||
@@ -467,17 +477,19 @@ class VideoDetailController extends GetxController
 
     final posMs = player.state.position.inMilliseconds;
     final advanced = _lastFreezePosMs >= 0 && posMs > _lastFreezePosMs;
-    final String pts;
+    final double? pts;
     try {
-      pts = player.getProperty('video-pts');
+      pts = double.tryParse(player.getProperty('video-pts'));
     } catch (_) {
       return;
     }
-    final frozen = pts.isNotEmpty && pts == _lastVideoPts;
-    _lastFreezePosMs = posMs;
-    if (pts.isNotEmpty) {
-      _lastVideoPts = pts;
+    if (pts == null || !pts.isFinite) {
+      _resetFreezeSamples();
+      return;
     }
+    final frozen = pts == _lastVideoPts;
+    _lastFreezePosMs = posMs;
+    _lastVideoPts = pts;
 
     if (frozen && advanced) {
       _healthyStreak = 0;
@@ -506,7 +518,13 @@ class VideoDetailController extends GetxController
   void _rescheduleCdnStallCheck() {
     _cdnStallTimer?.cancel();
     _cdnStallTimer = null;
-    if (_cdnAutoSwitchDisabled || !plPlayerController.isBuffering.value) {
+    if (isClosed ||
+        _cdnAutoSwitchDisabled ||
+        _cdnSwitchCompleter != null ||
+        plPlayerController.cid != cid.value ||
+        _cdnAutoSwitchCount >= VideoUtils.cdnRotation.length ||
+        !plPlayerController.visible ||
+        !plPlayerController.isBuffering.value) {
       return;
     }
     final initialLoad = plPlayerController.positionInMilliseconds <= 0;
@@ -527,7 +545,11 @@ class VideoDetailController extends GetxController
   Future<void> _handleCdnStall() async {
     _cdnStallTimer = null;
     final plCtr = plPlayerController;
-    if (!plCtr.isBuffering.value) return;
+    if (plCtr.cid != cid.value ||
+        !plCtr.visible ||
+        !plCtr.isBuffering.value) {
+      return;
+    }
     if (plCtr.isSeeking.value) {
       // 用户还在拖进度条，等松手后重新计时
       _rescheduleCdnStallCheck();
@@ -554,43 +576,90 @@ class VideoDetailController extends GetxController
   Future<void> _performCdnSwitch() async {
     if (isClosed ||
         _cdnAutoSwitchDisabled ||
+        _cdnSwitchCompleter != null ||
         isQuerying ||
         plPlayerController.processing ||
-        plPlayerController.isSeeking.value) {
+        plPlayerController.isSeeking.value ||
+        plPlayerController.cid != cid.value ||
+        !plPlayerController.visible) {
+      if (!isClosed &&
+          !_cdnAutoSwitchDisabled &&
+          (isQuerying || plPlayerController.processing)) {
+        _rescheduleCdnStallCheck();
+      }
       return;
     }
 
+    final switchCompleter = Completer<void>();
+    _cdnSwitchCompleter = switchCompleter;
     final current = VideoUtils.cdnService;
     final next = VideoUtils.nextCdnService(current);
-    if (next == null) return;
-    if (_cdnAutoSwitchCount >= VideoUtils.cdnRotation.length) {
-      // 一轮全部切过仍未恢复，不再打扰
-      return;
-    }
-
-    _cdnAutoSwitchCount++;
-    _healthyStreak = 0;
     final stallCid = cid.value;
-    showCdnSwitchedToast(
-      next: next,
-      isFullScreen: isFullScreen,
-      onRevert: () async {
-        if (isClosed || cid.value != stallCid) return;
-        // 用户撤销：本视频内不再自动切换
-        _cdnAutoSwitchDisabled = true;
-        // 等待切换触发的重载结束，避免撤销被 isQuerying 吞掉
-        for (var i = 0; i < 25 && isQuerying; i++) {
-          await Future.delayed(const Duration(milliseconds: 200));
-          if (isClosed || cid.value != stallCid) return;
-        }
-        SmartDialog.showToast('已切回「${current.desc}」');
-        await _applyCdnAndReload(current);
-      },
-    );
-    await _applyCdnAndReload(next);
+    final session = _cdnSession;
+    try {
+      if (next == null) return;
+      if (_cdnAutoSwitchCount >= VideoUtils.cdnRotation.length) {
+        // 一轮全部切过仍未恢复，不再打扰
+        return;
+      }
+
+      _cdnAutoSwitchCount++;
+      _healthyStreak = 0;
+      showCdnSwitchedToast(
+        next: next,
+        isFullScreen: isFullScreen,
+        onRevert: () => _revertCdnSwitch(
+          current: current,
+          switchedTo: next,
+          cid: stallCid,
+          session: session,
+        ),
+      );
+      await _applyCdnAndReload(next, cid: stallCid, session: session);
+    } finally {
+      if (identical(_cdnSwitchCompleter, switchCompleter)) {
+        _cdnSwitchCompleter = null;
+        switchCompleter.complete();
+      }
+      _rescheduleCdnStallCheck();
+    }
   }
 
-  Future<void> _applyCdnAndReload(CDNService service) async {
+  Future<void> _revertCdnSwitch({
+    required CDNService current,
+    required CDNService switchedTo,
+    required int cid,
+    required int session,
+  }) async {
+    if (!_isCurrentCdnSession(session, cid) ||
+        VideoUtils.cdnService != switchedTo) {
+      return;
+    }
+    // 用户撤销：本视频内不再自动切换
+    _cdnAutoSwitchDisabled = true;
+    await _cdnSwitchCompleter?.future;
+    while (isQuerying || plPlayerController.processing) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      if (!_isCurrentCdnSession(session, cid) ||
+          VideoUtils.cdnService != switchedTo) {
+        return;
+      }
+    }
+    if (!_isCurrentCdnSession(session, cid) ||
+        !plPlayerController.visible ||
+        VideoUtils.cdnService != switchedTo) {
+      return;
+    }
+    SmartDialog.showToast('已切回「${current.desc}」');
+    await _applyCdnAndReload(current, cid: cid, session: session);
+  }
+
+  Future<void> _applyCdnAndReload(
+    CDNService service, {
+    required int cid,
+    required int session,
+  }) async {
+    if (!_isCurrentCdnSession(session, cid)) return;
     final state = plPlayerController.videoPlayerController?.state;
     if (state == null || state.duration == Duration.zero) {
       // 文件尚未打开成功（首帧前卡死），保留本次加载原定的起播位置
@@ -600,6 +669,9 @@ class VideoDetailController extends GetxController
     }
     VideoUtils.cdnService = service;
     await setting.put(SettingBoxKey.CDNService, service.name);
+    if (!_isCurrentCdnSession(session, cid) || !plPlayerController.visible) {
+      return;
+    }
     _autoPlay.value = true;
     await queryVideoUrl(fromReset: true);
   }
@@ -1457,6 +1529,7 @@ class VideoDetailController extends GetxController
 
   @override
   void onClose() {
+    _cdnSession++;
     _cdnStallTimer?.cancel();
     _videoFreezeTimer?.cancel();
     _bufferingWorker?.dispose();
@@ -1478,6 +1551,7 @@ class VideoDetailController extends GetxController
   }
 
   void onReset({bool isStein = false}) {
+    _cdnSession++;
     if (isFileSource) {
       cacheLocalProgress();
     }
