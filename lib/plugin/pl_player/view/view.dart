@@ -56,6 +56,7 @@ import 'package:PiliPlus/utils/connectivity_utils.dart';
 import 'package:PiliPlus/utils/duration_utils.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
+import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:PiliPlus/utils/mobile_observer.dart';
@@ -970,6 +971,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   void _onHorizontalDragEnd() {
     if (plPlayerController.seekToPos case final seekToPos?) {
+      feedBack();
       plPlayerController
         ..position.value = seekToPos.inSeconds
         ..seekTo(seekToPos, isSeek: false)
