@@ -1,12 +1,14 @@
 name: Sync upstream and build custom apps
 
 on:
-  push:
-    branches:
-      - main
   schedule:
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Rebuild even when the upstream version has not changed"
+        type: boolean
+        default: false
 
 concurrency:
   group: sync-upstream-build
@@ -38,6 +40,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          FORCE_BUILD: ${{ inputs.force_build || false }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -63,12 +66,12 @@ jobs:
             git push origin HEAD:main
           fi
 
-          existing_release="$(
-            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[].tag_name' |
-              grep -F -m 1 "lemontea-${upstream_release_tag}-" || true
-          )"
-
-          if [ "${{ github.event_name }}" != "schedule" ] || [ -z "$existing_release" ]; then
+          # Match the semantic version in release titles, not commit counts or tags.
+          # Fail on API errors instead of treating them as a new version.
+          release_names="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[] | select(.draft == false and .prerelease == false) | .name')"
+          test -n "$version_name"
+          existing_release="$(printf '%s\n' "$release_names" | awk -v prefix="${version_name}.lemontea+" 'index($0, prefix) == 1 { print; exit }' || true)"
+          if [ "$FORCE_BUILD" = "true" ] || [ -z "$existing_release" ]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
@@ -83,7 +86,7 @@ jobs:
       - name: Checkout updated fork main
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
       - name: Setup Java
@@ -139,7 +142,7 @@ jobs:
       - name: Checkout updated fork main
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
       - name: Setup Flutter
