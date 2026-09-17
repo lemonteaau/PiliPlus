@@ -95,7 +95,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
       processingState = AudioProcessingState.ready;
     }
 
-    final playing = status.isPlaying;
+    final playing = status.isPlaying || isBuffering;
     playbackState.add(
       playbackState.value.copyWith(
         processingState: isBuffering
