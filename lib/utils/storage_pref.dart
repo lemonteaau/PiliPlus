@@ -283,22 +283,6 @@ abstract final class Pref {
     return CDNService.backupUrl;
   }
 
-  static List<CDNService> get pinnedCDNServices {
-    final value = _setting.get(SettingBoxKey.pinnedCDNServices);
-    if (value is! List) return const [];
-
-    final result = <CDNService>[];
-    for (final name in value.whereType<String>()) {
-      for (final service in CDNService.values) {
-        if (service.name == name && !result.contains(service)) {
-          result.add(service);
-          break;
-        }
-      }
-    }
-    return result;
-  }
-
   static String get banWordForRecommend =>
       _setting.get(SettingBoxKey.banWordForRecommend, defaultValue: '');
 
@@ -461,6 +445,22 @@ abstract final class Pref {
 
   static bool get cdnSpeedTest =>
       _setting.get(SettingBoxKey.cdnSpeedTest, defaultValue: true);
+
+  static bool get threadRipperEnabled => _setting.get(
+    SettingBoxKey.threadRipperEnabled,
+    defaultValue: true,
+  );
+
+  static int get threadRipperConcurrency {
+    final value = _setting.get(SettingBoxKey.threadRipperConcurrency);
+    if (value is int && const [4, 8, 16, 32].contains(value)) return value;
+    return 8;
+  }
+
+  static String get threadRipperCdnModeName => _setting.get(
+    SettingBoxKey.threadRipperCdnMode,
+    defaultValue: 'overseas',
+  );
 
   static bool get autoUpdate =>
       _setting.get(SettingBoxKey.autoUpdate, defaultValue: true);

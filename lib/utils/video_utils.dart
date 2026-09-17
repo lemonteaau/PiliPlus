@@ -10,30 +10,6 @@ abstract final class VideoUtils {
   static String? liveCdnUrl = Pref.liveCdnUrl;
   static bool disableAudioCDN = Pref.disableAudioCDN;
 
-  static List<CDNService> orderedCdnServices({
-    Iterable<CDNService>? pinned,
-  }) {
-    final pinnedServices = pinned ?? Pref.pinnedCDNServices;
-    return [
-      ...pinnedServices,
-      ...CDNService.values.where((item) => !pinnedServices.contains(item)),
-    ];
-  }
-
-  /// 自动切换用的轮换列表：置顶项优先，其余按枚举顺序；
-  /// 排除 baseUrl（通常是 mcdn/P2P 节点，卡顿时切过去没有意义）
-  static List<CDNService> get cdnRotation => orderedCdnServices()
-      .where((item) => item != CDNService.baseUrl)
-      .toList();
-
-  static CDNService? nextCdnService([CDNService? current]) {
-    current ??= cdnService;
-    final rotation = cdnRotation;
-    if (rotation.length < 2) return null;
-    final next = rotation[(rotation.indexOf(current) + 1) % rotation.length];
-    return next == current ? null : next;
-  }
-
   static const _proxyTf = 'proxy-tf-all-ws.bilivideo.com';
 
   static final _mirrorRegex = RegExp(
@@ -55,10 +31,6 @@ abstract final class VideoUtils {
       return urls.first;
     }
 
-    final selectedCDNService = isAudio && disableAudioCDN
-        ? CDNService.backupUrl
-        : defaultCDNService;
-
     String? mcdnTf;
     String? mcdnUpgcxcode;
 
@@ -71,10 +43,11 @@ abstract final class VideoUtils {
           // upos-sz-mirrorcoso1.bilivideo.com os=mcdn
           mcdnUpgcxcode = url;
         } else {
-          if (selectedCDNService == CDNService.backupUrl) {
+          if (defaultCDNService == CDNService.backupUrl ||
+              (isAudio && disableAudioCDN)) {
             return url;
           }
-          return uri.replace(host: selectedCDNService.host).toString();
+          return uri.replace(host: defaultCDNService.host).toString();
         }
       }
 
@@ -93,15 +66,9 @@ abstract final class VideoUtils {
       if (url.contains('szbdyd.com')) {
         final uri = Uri.parse(url);
         final hostname =
-            uri.queryParameters['xy_usource'] ??
-            selectedCDNService.host ??
-            uri.host;
+            uri.queryParameters['xy_usource'] ?? defaultCDNService.host;
         return uri
-            .replace(
-              scheme: 'https',
-              host: hostname,
-              port: 443,
-            )
+            .replace(scheme: 'https', host: hostname, port: 443)
             .toString();
       }
 
@@ -119,11 +86,7 @@ abstract final class VideoUtils {
                   queryParameters: {'url': mcdnTf},
                 ).toString()
         : Uri.parse(mcdnUpgcxcode)
-              .replace(
-                scheme: 'https',
-                host: selectedCDNService.host ?? CDNService.ali.host,
-                port: 443,
-              )
+              .replace(host: defaultCDNService.host ?? CDNService.ali.host)
               .toString();
   }
 

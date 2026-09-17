@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io';
 
 import 'package:PiliPlus/models/common/video/audio_quality.dart';
@@ -10,6 +11,7 @@ import 'package:PiliPlus/pages/setting/widgets/ordered_multi_select_dialog.dart'
 import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/plugin/pl_player/models/audio_output_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
+import 'package:PiliPlus/services/thread_ripper/thread_ripper.dart';
 import 'package:PiliPlus/utils/filtering_text.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
@@ -59,7 +61,7 @@ List<SettingsModel> get videoSettings => [
     title: 'CDN 设置',
     leading: const Icon(MdiIcons.cloudPlusOutline),
     getSubtitle: () =>
-        '当前使用：${VideoUtils.cdnService.desc}，部分 CDN 可能失效，如无法播放请尝试切换',
+        '当前使用：${VideoUtils.cdnService.desc}，部分 CDN 可能失效，如无法播放请尝试切换；多线程加速失败时回落用此设置',
     onTap: _showCDNDialog,
   ),
   NormalModel(
@@ -82,6 +84,29 @@ List<SettingsModel> get videoSettings => [
     setKey: SettingBoxKey.disableAudioCDN,
     defaultVal: false,
     onChanged: (value) => VideoUtils.disableAudioCDN = value,
+  ),
+  SwitchModel(
+    title: '线程撕裂者多线程加速',
+    subtitle: '主链路：分段多线程并发下载；关闭或启动失败时回落到手动 CDN 直连',
+    leading: const Icon(Icons.bolt_outlined),
+    setKey: SettingBoxKey.threadRipperEnabled,
+    defaultVal: true,
+    onChanged: (value) {
+      if (!value) unawaited(ThreadRipper.instance.stop());
+    },
+  ),
+  NormalModel(
+    title: '加速 CDN 池',
+    leading: const Icon(MdiIcons.earth),
+    getSubtitle: () =>
+        '当前：${RipperCdnMode.fromName(Pref.threadRipperCdnModeName).label}，仅影响多线程加速链路',
+    onTap: _showRipperCdnDialog,
+  ),
+  NormalModel(
+    title: '加速并发线程',
+    leading: const Icon(Icons.numbers_outlined),
+    getSubtitle: () => '当前：${Pref.threadRipperConcurrency}，默认 8，弱设备可降到 4',
+    onTap: _showRipperConcurrencyDialog,
   ),
   NormalModel(
     title: '默认画质',
@@ -187,6 +212,42 @@ Future<void> _showCDNDialog(BuildContext context, VoidCallback setState) async {
   if (res != null) {
     VideoUtils.cdnService = res;
     await GStorage.setting.put(SettingBoxKey.CDNService, res.name);
+    setState();
+  }
+}
+
+Future<void> _showRipperCdnDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<String>(
+    context: context,
+    builder: (context) => SelectDialog<String>(
+      title: '加速 CDN 池',
+      value: Pref.threadRipperCdnModeName,
+      values: RipperCdnMode.values.map((e) => (e.name, e.label)).toList(),
+    ),
+  );
+  if (res != null) {
+    await GStorage.setting.put(SettingBoxKey.threadRipperCdnMode, res);
+    setState();
+  }
+}
+
+Future<void> _showRipperConcurrencyDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<int>(
+    context: context,
+    builder: (context) => SelectDialog<int>(
+      title: '加速并发线程',
+      value: Pref.threadRipperConcurrency,
+      values: const [4, 8, 16, 32].map((e) => (e, '$e 线程')).toList(),
+    ),
+  );
+  if (res != null) {
+    await GStorage.setting.put(SettingBoxKey.threadRipperConcurrency, res);
     setState();
   }
 }

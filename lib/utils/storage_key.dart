@@ -38,7 +38,6 @@ abstract final class SettingBoxKey {
       enableLongShowControl = 'enableLongShowControl',
       horizontalScreen = 'horizontalScreen',
       CDNService = 'CDNService',
-      pinnedCDNServices = 'pinnedCDNServices',
       disableAudioCDN = 'disableAudioCDN',
       autoPiP = 'autoPiP',
       enableAutoLongPressSpeed = 'enableAutoLongPressSpeed',
@@ -215,6 +214,10 @@ abstract final class SettingBoxKey {
 
   static const String systemProxyHost = 'systemProxyHost',
       systemProxyPort = 'systemProxyPort';
+
+  static const String threadRipperEnabled = 'threadRipperEnabled',
+      threadRipperConcurrency = 'threadRipperConcurrency',
+      threadRipperCdnMode = 'threadRipperCdnMode';
 
   static const String themeMode = 'themeMode',
       defaultTextScale = 'textScale',

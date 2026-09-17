@@ -77,8 +77,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   final Rx<DataStatus> dataStatus = Rx(.none);
 
   Duration? seekToPos;
-  // 最近一次 seek 的时间，供 CDN 卡顿检测区分 seek 回填缓冲
-  DateTime? lastSeekAt;
   bool hasToasted = false;
   final RxBool isSeeking = false.obs;
 
@@ -1071,7 +1069,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (position < Duration.zero) {
       position = Duration.zero;
     }
-    lastSeekAt = DateTime.now();
     _heartDuration = position.inSeconds;
 
     Future<void> seek() async {
