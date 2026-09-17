@@ -253,10 +253,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     }
     if (_item.isNotEmpty) {
       playbackState.add(
-        playbackState.value.copyWith(
-          processingState: AudioProcessingState.idle,
-          playing: false,
-        ),
+        playbackState.value.copyWith(processingState: .ready, playing: false),
       );
       setMediaItem(_item.last);
       stop();
@@ -273,20 +270,9 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
           await AudioService._stop();
         }
      */
-    if (playbackState.value.processingState == AudioProcessingState.idle) {
-      playbackState.add(
-        PlaybackState(
-          processingState: AudioProcessingState.completed,
-          playing: false,
-        ),
-      );
-    }
-    playbackState.add(
-      PlaybackState(
-        processingState: AudioProcessingState.idle,
-        playing: false,
-      ),
-    );
+    playbackState
+      ..add(PlaybackState(processingState: .completed, playing: false))
+      ..add(PlaybackState(processingState: .idle, playing: false));
   }
 
   void onPositionChange(Duration position) {
@@ -296,10 +282,6 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
       return;
     }
 
-    playbackState.add(
-      playbackState.value.copyWith(
-        updatePosition: position,
-      ),
-    );
+    playbackState.add(playbackState.value.copyWith(updatePosition: position));
   }
 }

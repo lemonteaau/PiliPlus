@@ -972,6 +972,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       }),
       stream.buffering.listen((bool buffering) {
         isBuffering.value = buffering;
+        if (buffering) _stopWakeLockTimer();
         final playerStatus = this.playerStatus.value;
         if (!playerStatus.isCompleted) {
           videoPlayerServiceHandler?.onStatusChange(
