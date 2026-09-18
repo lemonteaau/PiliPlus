@@ -410,11 +410,20 @@ class AudioController extends GetxController
         }
       }),
       stream.buffering.listen((buffering) {
-        if (buffering) _stopStatusTimer();
+        if (buffering && !player!.state.completed) _stopStatusTimer();
       }),
       stream.completed.listen((completed) {
         _videoDetailController?.playedTime = player!.state.duration;
         if (completed) {
+          _statusTimer?.cancel();
+          _statusTimer = Timer(
+            const Duration(milliseconds: 500),
+            () => videoPlayerServiceHandler?.onStatusChange(
+              .completed,
+              false,
+              false,
+            ),
+          );
           if (shutdownTimerService.isWaiting) {
             shutdownTimerService.handleWaiting();
           } else {
