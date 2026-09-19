@@ -24,28 +24,6 @@ import 'package:material_ui/material_ui.dart';
 
 List<SettingsModel> get playSettings => [
   const SwitchModel(
-    title: '线程撕裂者',
-    subtitle: '并发下载音视频，保留原播放器；下次加载视频生效',
-    leading: Icon(Icons.speed),
-    setKey: SettingBoxKey.threadRipperEnabled,
-    defaultVal: true,
-  ),
-  const SwitchModel(
-    title: '线程撕裂者：海外节点',
-    subtitle: '开启优先海外节点，关闭优先大陆节点；下次加载生效',
-    leading: Icon(Icons.public),
-    setKey: SettingBoxKey.threadRipperOverseas,
-    defaultVal: true,
-  ),
-  getVideoFilterSelectModel(
-    title: '线程撕裂者：并发数',
-    subtitle: '音视频共享连接上限；下次加载生效',
-    key: SettingBoxKey.threadRipperConcurrency,
-    values: [4, 8, 16, 32, 64, 128],
-    defaultValue: 8,
-    isFilter: false,
-  ),
-  const SwitchModel(
     title: '弹幕开关',
     subtitle: '是否展示弹幕',
     leading: Icon(CustomIcons.dm_settings),

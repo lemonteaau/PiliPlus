@@ -62,6 +62,28 @@ List<SettingsModel> get videoSettings => [
         '当前使用：${VideoUtils.cdnService.desc}，部分 CDN 可能失效，如无法播放请尝试切换',
     onTap: _showCDNDialog,
   ),
+  const SwitchModel(
+    title: '线程撕裂者',
+    subtitle: '并发下载音视频，保留原播放器；下次加载视频生效',
+    leading: Icon(Icons.speed),
+    setKey: SettingBoxKey.threadRipperEnabled,
+    defaultVal: true,
+  ),
+  const SwitchModel(
+    title: '线程撕裂者：海外节点',
+    subtitle: '开启优先海外节点，关闭优先大陆节点；下次加载生效',
+    leading: Icon(Icons.public),
+    setKey: SettingBoxKey.threadRipperOverseas,
+    defaultVal: true,
+  ),
+  getVideoFilterSelectModel(
+    title: '线程撕裂者：并发数',
+    subtitle: '音视频共享连接上限；下次加载生效',
+    key: SettingBoxKey.threadRipperConcurrency,
+    values: [4, 8, 16, 32, 64, 128],
+    defaultValue: 8,
+    isFilter: false,
+  ),
   NormalModel(
     title: '直播 CDN 设置',
     leading: const Icon(MdiIcons.cloudPlusOutline),
