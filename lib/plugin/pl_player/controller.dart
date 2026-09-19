@@ -829,7 +829,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         video = proxy.register(dataSource.videoCandidates!);
         if (audioSource?.isNotEmpty == true &&
             dataSource.audioCandidates?.isNotEmpty == true) {
-          audioSource = proxy.register(dataSource.audioCandidates!);
+          audioSource = proxy.register(
+            dataSource.audioCandidates!,
+            isAudio: true,
+          );
         }
       } catch (_) {
         proxy.close();

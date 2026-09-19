@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -78,6 +79,66 @@ void main() {
     expect(partial.allows(a), isTrue);
   });
 
+  test(
+    'resolver follows original JavaScript reference traces in both regions',
+    () {
+      final fixtures = jsonDecode(
+        File('test/fixtures/ripper_resolver.json').readAsStringSync(),
+      ) as List;
+      for (final fixture in fixtures) {
+        final rep = fixture['representation'];
+        final originals = <String>[
+          rep['baseUrl'],
+          ...List<String>.from(rep['backupUrl']),
+        ];
+        final overseas = fixture['mode'] == 'overseas';
+        final urls = RipperCdnResolver.candidates(
+          originals,
+          overseas: overseas,
+        );
+        expect(urls.map((u) => u.toString()).toList(), fixture['urls']);
+        final resolver = RipperCdnResolver(
+          urls,
+          originals: originals.map(Uri.parse).toList(),
+          overseas: overseas,
+        );
+        for (final step in fixture['steps']) {
+          final args = step['args'] as List;
+          List<Uri>? result;
+          switch (step['op']) {
+            case 'startupCandidates':
+              result = resolver.startupCandidates();
+            case 'rangeCandidates':
+              result = resolver.rangeCandidates();
+            case 'rescueCandidates':
+              result = resolver.rescueCandidates();
+            case 'ordered':
+              result = resolver.ordered(args[0]);
+            case 'success':
+              resolver.success(
+                Uri.parse(args[0]),
+                args[1],
+                const Duration(seconds: 1),
+              );
+            case 'failure':
+              resolver.failure(
+                Uri.parse(args[0]),
+                status: args[1]['status'],
+                received: args[2],
+              );
+          }
+          if (result != null) {
+            expect(
+              result.map((u) => u.toString()).toList(),
+              step['expected'],
+              reason: '${fixture['mode']} ${step['op']}',
+            );
+          }
+        }
+      }
+    },
+  );
+
   late HttpServer cdn;
   late HttpClient client;
   late RipperRangeProxy proxy;
@@ -142,7 +203,15 @@ void main() {
             } catch (_) {}
           }
 
-          if (request.uri.path == '/seek' && start > 0 && start < 900000) {
+          if (request.uri.path == '/primary' && start >= 65536) {
+            timers.add(Timer(const Duration(seconds: 10), send));
+          } else if (request.uri.path == '/rescue' && start < 65536) {
+            timers.add(Timer(const Duration(milliseconds: 500), send));
+          } else if (request.uri.path == '/jam' && end > start) {
+            timers.add(Timer(const Duration(seconds: 10), send));
+          } else if (request.uri.path == '/seek' &&
+              start > 0 &&
+              start < 900000) {
             timers.add(Timer(const Duration(milliseconds: 200), send));
           } else if (request.uri.path == '/slow') {
             timers.add(Timer(const Duration(seconds: 3), send));
@@ -298,4 +367,43 @@ void main() {
       expect(next.$2, source.sublist(900000, 901000));
     },
   );
+  test(
+    'eight-thread saturation still leaves a connection for rescue',
+    () async {
+      source = Uint8List(3 * 1024 * 1024);
+      proxy.close();
+      var inFlightPeak = 0;
+      proxy = RipperRangeProxy(
+        concurrency: 8,
+        userAgent: 'test',
+        onActiveRequestsChanged: (count) =>
+            inFlightPeak = max(inFlightPeak, count),
+      );
+      await proxy.start();
+      // Separate tracks each start with an unresponsive primary. Together they
+      // fill all ordinary slots; no ordinary connection will finish in 3 s.
+      final results = await Future.wait(
+        List.generate(
+          8,
+          (_) =>
+              fetch(register(['/primary', '/rescue']), range: 'bytes=0-262143'),
+        ),
+      ).timeout(const Duration(seconds: 3));
+      for (final result in results) {
+        expect(result.$1.statusCode, 206);
+        expect(result.$2, source.sublist(0, 262144));
+      }
+      expect(inFlightPeak, lessThanOrEqualTo(8));
+      expect(paths, contains('/rescue'));
+    },
+  );
+  test('2 MiB media does not become dozens of tiny round trips', () async {
+    source = Uint8List(2 * 1024 * 1024);
+    proxy.close();
+    proxy = RipperRangeProxy(concurrency: 8, userAgent: 'test');
+    await proxy.start();
+    final result = await fetch(register(['/good']));
+    expect(result.$2, source);
+    expect(paths.length, lessThanOrEqualTo(10));
+  });
 }

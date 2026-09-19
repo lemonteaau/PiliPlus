@@ -13,8 +13,10 @@ class RipperRangeProxy {
     this.overseas = true,
     required this.userAgent,
     this.referer = 'https://www.bilibili.com/',
+    this.onActiveRequestsChanged,
   }) : assert(concurrency > 0 && concurrency <= 128);
 
+  final void Function(int active)? onActiveRequestsChanged;
   final int concurrency;
   final bool overseas;
   final String userAgent;
@@ -25,8 +27,14 @@ class RipperRangeProxy {
   final _client = HttpClient()
     ..autoUncompress = false
     ..connectionTimeout = const Duration(milliseconds: 5500);
-  final _waiters = <Completer<void>>[];
+  final _waiters = <_Waiter>[];
+  int _sequence = 0;
   int _active = 0;
+  int _normalActive = 0;
+  int get _normalLimit => concurrency == 1
+      ? 1
+      : concurrency -
+            max(1, (concurrency / 8).ceil()).clamp(1, concurrency - 1);
   bool _closed = false;
   HttpServer? _server;
   final String _token = List.generate(
@@ -46,18 +54,37 @@ class RipperRangeProxy {
     server.listen((request) => _serve(request).ignore());
   }
 
-  String register(Iterable<String> urls) => registerCandidates(
-    RipperCdnResolver.candidates(urls, overseas: overseas),
-  );
+  String register(Iterable<String> urls, {bool isAudio = false}) {
+    final originals = urls
+        .map(Uri.parse)
+        .where(RipperCdnResolver.supports)
+        .toList();
+    return registerCandidates(
+      RipperCdnResolver.candidates(urls, overseas: overseas),
+      originals: originals,
+      isAudio: isAudio,
+    );
+  }
 
-  // Also permits loopback fixtures for deterministic transport tests. Production
-  // callers use register(), which only accepts Bilibili media addresses.
-  String registerCandidates(List<Uri> urls) {
+  // Explicit candidates are used by the loopback regression fixtures.
+  String registerCandidates(
+    List<Uri> urls, {
+    List<Uri>? originals,
+    bool isAudio = false,
+  }) {
     if (_closed || _server == null || urls.isEmpty) {
       throw StateError('No download session or media candidates');
     }
     final id = '/$_token/${_tracks.length}';
-    _tracks[id] = _Track(RipperCdnResolver(urls, bans: _bans));
+    _tracks[id] = _Track(
+      RipperCdnResolver(
+        urls,
+        bans: _bans,
+        overseas: overseas,
+        originals: originals,
+      ),
+      isAudio,
+    );
     return 'http://127.0.0.1:${_server!.port}$id';
   }
 
@@ -70,31 +97,61 @@ class RipperRangeProxy {
     _client.close(force: true);
     unawaited(_server?.close(force: true));
     for (final waiter in _waiters) {
-      waiter.complete();
+      if (!waiter.ready.isCompleted) {
+        waiter.ready.completeError(const HttpException('Session closed'));
+      }
     }
     _waiters.clear();
     _tracks.clear();
   }
 
-  Future<void> _slot(_Job job) async {
-    while (_active >= concurrency) {
-      job.check();
-      final waiter = Completer<void>();
-      _waiters.add(waiter);
-      try {
-        await job.race(waiter.future);
-      } finally {
-        _waiters.remove(waiter);
-      }
-    }
+  Future<void> _slot(
+    _Job job, {
+    required bool rescue,
+    required int priority,
+  }) async {
     job.check();
     if (_closed) throw const HttpException('Download session closed');
-    _active++;
+    final waiter = _Waiter(rescue, priority, _sequence++);
+    void cancel() {
+      if (_waiters.remove(waiter)) {
+        waiter.ready.completeError(const HttpException('Download cancelled'));
+      }
+    }
+
+    job._listeners.add(cancel);
+    _waiters.add(waiter);
+    _drain();
+    try {
+      await waiter.ready.future;
+    } finally {
+      job._listeners.remove(cancel);
+    }
   }
 
-  void _release() {
+  void _drain() {
+    _waiters.sort((a, b) {
+      final priority = b.priority.compareTo(a.priority);
+      return priority != 0 ? priority : a.sequence.compareTo(b.sequence);
+    });
+    while (_active < concurrency) {
+      final index = _waiters.indexWhere(
+        (w) => w.rescue || _normalActive < _normalLimit,
+      );
+      if (index < 0) return;
+      final waiter = _waiters.removeAt(index);
+      _active++;
+      onActiveRequestsChanged?.call(_active);
+      if (!waiter.rescue) _normalActive++;
+      waiter.ready.complete();
+    }
+  }
+
+  void _release({required bool rescue}) {
     _active--;
-    if (_waiters.isNotEmpty) _waiters.removeAt(0).complete();
+    onActiveRequestsChanged?.call(_active);
+    if (!rescue) _normalActive--;
+    _drain();
   }
 
   Future<_Piece> _attempt(
@@ -102,15 +159,19 @@ class RipperRangeProxy {
     Uri url,
     int start,
     int end,
-    _Job job,
-  ) async {
-    await _slot(job);
+    _Job job, {
+    required bool rescue,
+    required int priority,
+  }) async {
+    await _slot(job, rescue: rescue, priority: priority);
     HttpClientRequest? request;
     final clock = Stopwatch()..start();
     Timer? deadline;
     int status = 0;
     int received = 0;
+    bool completed = false;
     try {
+      job.check();
       request = await _client
           .getUrl(url)
           .timeout(const Duration(milliseconds: 5500));
@@ -153,8 +214,9 @@ class RipperRangeProxy {
       if (bytes.length != end - start + 1) {
         throw const HttpException('Truncated CDN Range body');
       }
+      completed = true;
       track.resolver.success(url, bytes.length, clock.elapsed);
-      return _Piece(bytes.takeBytes(), total);
+      return _Piece(bytes.takeBytes(), total, url);
     } catch (_) {
       if (!job.cancelled) {
         track.resolver.failure(url, status: status, received: received);
@@ -162,42 +224,52 @@ class RipperRangeProxy {
       rethrow;
     } finally {
       deadline?.cancel();
-      request?.abort();
+      if (!completed) request?.abort();
       job.requests.remove(request);
-      _release();
+      _release(rescue: rescue);
     }
   }
 
-  // Start a second copy after 900 ms, or immediately if the first fails.
-  // First validated response wins; the losing connection is aborted.
+  // Equivalent to startupAttempt / downloadPiece's Promise.any: stagger
+  // metadata at 0/120/300 ms, race startup heads immediately, and hedge media.
   Future<_Piece> _race(
     _Track track,
     List<Uri> urls,
     int start,
     int end,
-    _Job parent,
-  ) async {
+    _Job parent, {
+    required int priority,
+    bool metadata = false,
+    bool startup = false,
+    bool hurry = false,
+  }) async {
     final result = Completer<_Piece>();
     final jobs = <_Job>[];
+    final timers = <Timer>[];
+    final launched = <int>{};
     int failures = 0;
-    Timer? hedge;
-    bool secondStarted = false;
     void launch(int index) {
-      if (result.isCompleted || parent.cancelled) return;
+      if (result.isCompleted || parent.cancelled || !launched.add(index)) {
+        return;
+      }
       final job = _Job();
       jobs.add(job);
       parent.children.add(job);
-      _attempt(track, urls[index], start, end, job).then(
+      _attempt(
+        track,
+        urls[index],
+        start,
+        end,
+        job,
+        rescue: index > 0,
+        priority: priority + (index > 0 && !metadata ? 20 : 0),
+      ).then(
         (piece) {
           if (!result.isCompleted) result.complete(piece);
         },
         onError: (Object error, StackTrace stack) {
           failures++;
-          if (index == 0 && urls.length > 1 && !secondStarted) {
-            secondStarted = true;
-            hedge?.cancel();
-            launch(1);
-          }
+          if (index == 0 && urls.length > 1 && !metadata) launch(1);
           if (failures == urls.length && !result.isCompleted) {
             result.completeError(error, stack);
           }
@@ -206,18 +278,26 @@ class RipperRangeProxy {
     }
 
     launch(0);
-    if (urls.length > 1) {
-      hedge = Timer(const Duration(milliseconds: 900), () {
-        if (!secondStarted) {
-          secondStarted = true;
-          launch(1);
-        }
-      });
+    for (var i = 1; i < urls.length; i++) {
+      final delay = metadata
+          ? (i == 1 ? 120 : 300)
+          : startup
+          ? 0
+          : hurry
+          ? 250
+          : 900;
+      if (delay == 0) {
+        launch(i);
+      } else {
+        timers.add(Timer(Duration(milliseconds: delay), () => launch(i)));
+      }
     }
     try {
       return await parent.race(result.future);
     } finally {
-      hedge?.cancel();
+      for (final timer in timers) {
+        timer.cancel();
+      }
       for (final job in jobs) {
         job.cancel();
         parent.children.remove(job);
@@ -225,28 +305,84 @@ class RipperRangeProxy {
     }
   }
 
-  Future<_Piece> _download(_Track track, int start, int end, _Job job) async {
+  Future<_Piece> _download(
+    _Track track,
+    int start,
+    int end,
+    _Job job, {
+    List<Uri> preferred = const [],
+    int pieceIndex = 0,
+    int priority = 50,
+    bool metadata = false,
+    bool startup = false,
+    bool hurry = false,
+  }) async {
     final clock = Stopwatch()..start();
     Object error = const HttpException('No available CDN');
     for (var round = 0; round < 3; round++) {
       job.check();
-      final urls = track.resolver.ordered().take(8).toList();
-      for (var i = 0; i < urls.length; i += 2) {
-        job.check();
-        if (clock.elapsed > const Duration(seconds: 25)) throw error;
+      if (round > 0) {
+        if (clock.elapsed > const Duration(seconds: 25)) break;
+        await job.race(
+          Future<void>.delayed(
+            Duration(milliseconds: 500 * (1 << (round - 1))),
+          ),
+        );
+      }
+      if (metadata) {
+        var urls = track.resolver.startupCandidates().take(3).toList();
+        if (urls.isEmpty && round > 0) {
+          urls = track.resolver.ordered(round).take(3).toList();
+        }
+        if (urls.isEmpty) break;
         try {
           return await _race(
             track,
-            urls.sublist(i, min(i + 2, urls.length)),
+            urls,
             start,
             end,
             job,
+            priority: 220,
+            metadata: true,
+          );
+        } catch (e) {
+          error = e;
+        }
+        continue;
+      }
+      final candidates = track.resolver.pieceCandidates(
+        preferred,
+        pieceIndex,
+        round,
+      );
+      final limit = min(8, candidates.length);
+      final tried = <Uri>{};
+      while (tried.length < limit) {
+        job.check();
+        final untried = candidates.where((u) => !tried.contains(u)).toList();
+        final allowed = untried.where(track.resolver.bans.allows).toList();
+        final pair = (allowed.isEmpty ? untried : allowed)
+            .take(min(startup ? limit : 2, limit - tried.length))
+            .toList();
+        if (pair.isEmpty) break;
+        tried.addAll(pair);
+        try {
+          return await _race(
+            track,
+            pair,
+            start,
+            end,
+            job,
+            priority: priority,
+            startup: startup,
+            hurry: hurry,
           );
         } catch (e) {
           error = e;
         }
       }
     }
+    job.check();
     throw error;
   }
 
@@ -275,7 +411,7 @@ class RipperRangeProxy {
     bool sentHeaders = false;
     try {
       if (track.total == null) {
-        final probe = await _download(track, 0, 0, job);
+        final probe = await _download(track, 0, 0, job, metadata: true);
         track.total = probe.total;
       }
       final total = track.total!;
@@ -295,32 +431,81 @@ class RipperRangeProxy {
       if (request.method != 'HEAD') {
         // A bounded window prevents mpv's open-ended ranges from buffering an
         // entire movie in memory. Flush in file order with socket backpressure.
-        const chunkSize = 64 * 1024;
-        for (var cursor = start; cursor <= end;) {
+        // Sliding bounded window: refill after each emitted piece, without
+        // waiting for the slowest member of a batch. Larger steady-state
+        // pieces amortize overseas request latency; keep the first one small.
+        final headEnd = min(end, start + 64 * 1024 - 1);
+        final head = await _download(
+          track,
+          start,
+          headEnd,
+          job,
+          preferred: track.resolver.rangeCandidates(),
+          startup: true,
+          priority: 220,
+        );
+        job.check();
+        response.add(head.bytes);
+        sentHeaders = true;
+        await response.flush();
+        var cursor = headEnd + 1;
+        var index = 1;
+        final audioBudget = max(1, min(_normalLimit, (concurrency / 8).ceil()));
+        final budget = track.isAudio
+            ? audioBudget
+            : max(1, _normalLimit - audioBudget);
+        var preferred = <Uri>[head.url];
+        final pieces = <Future<(_Piece?, Object?, StackTrace?)>>[];
+        void enqueue() {
+          if (cursor > end) return;
+          if (index > budget && (index - 1) % budget == 0) {
+            preferred = track.resolver.rangeCandidates();
+          }
+          // Native mpv requests are open-ended rather than SIDX segments.
+          // Partition a bounded 2 MiB video window over the same piece budget
+          // instead of turning the upstream 64 KiB minimum into a fixed size.
+          final size = track.isAudio
+              ? 64 * 1024
+              : max(
+                  64 * 1024,
+                  (2 * 1024 * 1024 - 64 * 1024 + budget - 1) ~/ budget,
+                );
+          final last = min(end, cursor + size - 1);
+          pieces.add(
+            _download(
+              track,
+              cursor,
+              last,
+              job,
+              preferred: preferred,
+              pieceIndex: index,
+              hurry: index <= budget,
+              priority: index <= budget
+                  ? 120 - min(30, index++)
+                  : 55 - min(20, index++ % budget),
+            ).then(
+              (piece) => (piece, null, null),
+              onError: (Object error, StackTrace stack) => (null, error, stack),
+            ),
+          );
+          cursor = last + 1;
+        }
+
+        for (var i = 0; i < budget; i++) {
+          enqueue();
+        }
+        while (pieces.isNotEmpty) {
+          final (piece, error, stack) = await pieces.removeAt(0);
+          if (error != null) Error.throwWithStackTrace(error, stack!);
           job.check();
-          final pieces = <Future<(_Piece?, Object?, StackTrace?)>>[];
-          for (var i = 0; i < concurrency && cursor <= end; i++) {
-            final last = min(end, cursor + chunkSize - 1);
-            pieces.add(
-              _download(track, cursor, last, job).then(
-                (piece) => (piece, null, null),
-                onError: (Object error, StackTrace stack) =>
-                    (null, error, stack),
-              ),
-            );
-            cursor = last + 1;
+          if (piece!.total != total) {
+            throw const HttpException('Resource changed');
           }
-          for (final pending in pieces) {
-            final (piece, error, stack) = await pending;
-            if (error != null) Error.throwWithStackTrace(error, stack!);
-            job.check();
-            if (piece!.total != total) {
-              throw const HttpException('Resource changed');
-            }
-            response.add(piece.bytes);
-            sentHeaders = true;
-            await response.flush();
-          }
+          response.add(piece.bytes);
+          sentHeaders = true;
+          await response.flush();
+          job.check();
+          enqueue();
         }
       }
       await response.close();
@@ -381,13 +566,15 @@ class RipperRangeProxy {
 }
 
 class _Track {
-  _Track(this.resolver);
+  _Track(this.resolver, this.isAudio);
+  final bool isAudio;
   final RipperCdnResolver resolver;
   int? total;
 }
 
 class _Piece {
-  _Piece(this.bytes, this.total);
+  _Piece(this.bytes, this.total, this.url);
+  final Uri url;
   final Uint8List bytes;
   final int total;
 }
@@ -440,4 +627,12 @@ class _Job {
       child.cancel();
     }
   }
+}
+
+class _Waiter {
+  _Waiter(this.rescue, this.priority, this.sequence);
+  final bool rescue;
+  final int priority;
+  final int sequence;
+  final ready = Completer<void>();
 }
