@@ -293,22 +293,6 @@ abstract final class Pref {
     return const [4, 8, 16, 32, 64, 128].contains(value) ? value as int : 8;
   }
 
-  static List<CDNService> get pinnedCDNServices {
-    final value = _setting.get(SettingBoxKey.pinnedCDNServices);
-    if (value is! List) return const [];
-
-    final result = <CDNService>[];
-    for (final name in value.whereType<String>()) {
-      for (final service in CDNService.values) {
-        if (service.name == name && !result.contains(service)) {
-          result.add(service);
-          break;
-        }
-      }
-    }
-    return result;
-  }
-
   static String get banWordForRecommend =>
       _setting.get(SettingBoxKey.banWordForRecommend, defaultValue: '');
 
