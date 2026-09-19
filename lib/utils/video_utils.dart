@@ -20,20 +20,6 @@ abstract final class VideoUtils {
     ];
   }
 
-  /// 自动切换用的轮换列表：置顶项优先，其余按枚举顺序；
-  /// 排除 baseUrl（通常是 mcdn/P2P 节点，卡顿时切过去没有意义）
-  static List<CDNService> get cdnRotation => orderedCdnServices()
-      .where((item) => item != CDNService.baseUrl)
-      .toList();
-
-  static CDNService? nextCdnService([CDNService? current]) {
-    current ??= cdnService;
-    final rotation = cdnRotation;
-    if (rotation.length < 2) return null;
-    final next = rotation[(rotation.indexOf(current) + 1) % rotation.length];
-    return next == current ? null : next;
-  }
-
   static const _proxyTf = 'proxy-tf-all-ws.bilivideo.com';
 
   static final _mirrorRegex = RegExp(

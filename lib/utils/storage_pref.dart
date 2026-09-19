@@ -281,6 +281,18 @@ abstract final class Pref {
     return CDNService.backupUrl;
   }
 
+  static bool get threadRipperEnabled =>
+      _setting.get(SettingBoxKey.threadRipperEnabled, defaultValue: true);
+  static bool get threadRipperOverseas =>
+      _setting.get(SettingBoxKey.threadRipperOverseas, defaultValue: true);
+  static int get threadRipperConcurrency {
+    final value = _setting.get(
+      SettingBoxKey.threadRipperConcurrency,
+      defaultValue: 8,
+    );
+    return const [4, 8, 16, 32, 64, 128].contains(value) ? value as int : 8;
+  }
+
   static List<CDNService> get pinnedCDNServices {
     final value = _setting.get(SettingBoxKey.pinnedCDNServices);
     if (value is! List) return const [];

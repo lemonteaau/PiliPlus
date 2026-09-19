@@ -1,6 +1,9 @@
 // ignore_for_file: constant_identifier_names
 
 abstract final class SettingBoxKey {
+  static const threadRipperEnabled = 'threadRipperEnabled';
+  static const threadRipperOverseas = 'threadRipperOverseas';
+  static const threadRipperConcurrency = 'threadRipperConcurrency';
   static const String btmProgressBehavior = 'btmProgressBehavior',
       defaultVideoQa = 'defaultVideoQa',
       defaultVideoQaCellular = 'defaultVideoQaCellular',

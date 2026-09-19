@@ -28,6 +28,7 @@ import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/video_fit_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
+import 'package:PiliPlus/services/thread_ripper/range_proxy.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/android/android_helper.dart';
@@ -77,8 +78,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   final Rx<DataStatus> dataStatus = Rx(.none);
 
   Duration? seekToPos;
-  // 最近一次 seek 的时间，供 CDN 卡顿检测区分 seek 回填缓冲
-  DateTime? lastSeekAt;
   bool hasToasted = false;
   final RxBool isSeeking = false.obs;
 
@@ -672,6 +671,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
   }
 
+  RipperRangeProxy? _ripperProxy;
+  int _ripperGeneration = 0;
+
   String? shadersDirPath;
   Future<String> get copyShadersToExternalDirectory async {
     if (shadersDirPath != null) {
@@ -803,8 +805,41 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         ...buffer,
     };
 
+    final generation = ++_ripperGeneration;
+    _ripperProxy?.close();
+    _ripperProxy = null;
     String video = dataSource.videoSource;
-    if (dataSource.audioSource case final audio? when (audio.isNotEmpty)) {
+    String? audioSource = dataSource.audioSource;
+    if (!isLive &&
+        dataSource is NetworkSource &&
+        dataSource.videoCandidates?.isNotEmpty == true &&
+        Pref.threadRipperEnabled) {
+      final proxy = RipperRangeProxy(
+        concurrency: Pref.threadRipperConcurrency,
+        overseas: Pref.threadRipperOverseas,
+        userAgent: BrowserUa.pc,
+      );
+      _ripperProxy = proxy;
+      try {
+        await proxy.start();
+        if (generation != _ripperGeneration || _playerCount == 0) {
+          proxy.close();
+          return;
+        }
+        video = proxy.register(dataSource.videoCandidates!);
+        if (audioSource?.isNotEmpty == true &&
+            dataSource.audioCandidates?.isNotEmpty == true) {
+          audioSource = proxy.register(dataSource.audioCandidates!);
+        }
+      } catch (_) {
+        proxy.close();
+        if (generation != _ripperGeneration || _playerCount == 0) return;
+        _ripperProxy = null;
+        video = dataSource.videoSource;
+        audioSource = dataSource.audioSource;
+      }
+    }
+    if (audioSource case final audio? when (audio.isNotEmpty)) {
       if (onlyPlayAudio.value) {
         video = audio;
       } else {
@@ -1078,7 +1113,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (position < Duration.zero) {
       position = Duration.zero;
     }
-    lastSeekAt = DateTime.now();
     _heartDuration = position.inSeconds;
 
     Future<void> seek() async {
@@ -1565,6 +1599,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     _playerCount = 0;
+    _ripperGeneration++;
+    _ripperProxy?.close();
+    _ripperProxy = null;
     if (removeSafeArea) {
       showSystemBar();
     }

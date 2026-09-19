@@ -285,7 +285,7 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
               child: Text(
-                '点图钉可置顶常用 CDN；测速和卡顿自动切换会优先使用置顶项。',
+                '点图钉可置顶常用 CDN；测速会优先使用置顶项。线程撕裂者启用时独立选择下载节点。',
                 style: TextStyle(fontSize: 13),
               ),
             ),
