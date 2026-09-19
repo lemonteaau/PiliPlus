@@ -196,4 +196,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$COMMIT_SHA" \
             --title "$RELEASE_VERSION" \
-            --notes "Based on upstream release ${UPSTREAM_RELEASE_TAG}. Includes the pinned CDN auto-switch feature."
+            --notes "Based on upstream release ${UPSTREAM_RELEASE_TAG}. Includes the native Bilibili-thread-ripper download layer with PiliPlus's original player retained, concurrent Range downloads, CDN candidate rotation, retries, and configurable overseas/mainland mode."
