@@ -919,7 +919,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   void _stopWakeLock() {
     WakelockPlus.disable();
-    _updatePlaybackState();
+    _updatePlaybackState(debugLabel: 'onVideoPaused');
   }
 
   void _updatePlaybackState({Duration? position, String? debugLabel}) {
@@ -987,11 +987,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       stream.position.listen((Duration position) {
         final posInSeconds = position.inSeconds;
 
-        if (posInSeconds == 0 && playerStatus.isPlaying) {
-          _updatePlaybackState(position: position);
-        }
-
         if (posInSeconds != this.position.value) {
+          if (posInSeconds == 0 && playerStatus.isPlaying) {
+            _updatePlaybackState(position: position);
+          }
+
           this.position.value = posInSeconds;
 
           makeHeartBeat(posInSeconds);
