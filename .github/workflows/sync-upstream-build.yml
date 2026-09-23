@@ -25,6 +25,7 @@ jobs:
       release_tag: ${{ steps.sync.outputs.release_tag }}
       release_version: ${{ steps.sync.outputs.release_version }}
       upstream_release_tag: ${{ steps.sync.outputs.upstream_release_tag }}
+      upstream_commit: ${{ steps.sync.outputs.upstream_commit }}
     steps:
       - name: Checkout fork main
         uses: actions/checkout@v7
@@ -45,33 +46,31 @@ jobs:
           git fetch upstream main
 
           upstream_release_tag="$(gh api repos/bggRGjQaUbCoE/PiliPlus/releases/latest --jq .tag_name)"
+          upstream_version="${upstream_release_tag#v}"
           before="$(git rev-parse HEAD)"
           git merge --no-edit upstream/main
           after="$(git rev-parse HEAD)"
+          upstream_commit="$(git rev-parse upstream/main)"
 
-          version_name="$(sed -nE 's/^version:[[:space:]]*([0-9.]+).*/\1/p' pubspec.yaml | head -n 1)"
-          version_code="$(git rev-list --count HEAD)"
-          release_version="${version_name}.lemontea+${version_code}"
-          release_tag="lemontea-${upstream_release_tag}-${GITHUB_RUN_NUMBER}"
+          release_version="${upstream_version}-fork.${GITHUB_RUN_NUMBER}"
+          release_tag="v${release_version}"
 
           echo "commit_sha=$after" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
           echo "upstream_release_tag=$upstream_release_tag" >> "$GITHUB_OUTPUT"
+          echo "upstream_commit=$upstream_commit" >> "$GITHUB_OUTPUT"
 
           if [ "$before" != "$after" ]; then
             git push origin HEAD:main
           fi
 
-          existing_release="$(
-            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[].tag_name' |
-              grep -F -m 1 "lemontea-${upstream_release_tag}-" || true
-          )"
-
-          if [ "${{ github.event_name }}" != "schedule" ] || [ -z "$existing_release" ]; then
-            echo "should_build=true" >> "$GITHUB_OUTPUT"
-          else
+          latest_release="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '[.[] | select(.draft == false and .prerelease == false)][0] // {} | [.tag_name // "", .target_commitish // ""] | @tsv')"
+          read -r existing_tag existing_commit <<< "$latest_release"
+          if [[ "$existing_commit" == "$after" && "$existing_tag" == "v${upstream_version}-fork."* ]]; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
           fi
 
   android:
@@ -191,9 +190,25 @@ jobs:
           RELEASE_TAG: ${{ needs.sync.outputs.release_tag }}
           RELEASE_VERSION: ${{ needs.sync.outputs.release_version }}
           UPSTREAM_RELEASE_TAG: ${{ needs.sync.outputs.upstream_release_tag }}
+          UPSTREAM_COMMIT: ${{ needs.sync.outputs.upstream_commit }}
         run: |
+          gh api "repos/bggRGjQaUbCoE/PiliPlus/releases/tags/$UPSTREAM_RELEASE_TAG" --jq '.body // ""' > "$RUNNER_TEMP/upstream-release-notes.md"
+          {
+            echo "Personal PiliPlus fork build $RELEASE_VERSION, based on upstream release $UPSTREAM_RELEASE_TAG."
+            echo
+            echo "Upstream: https://github.com/bggRGjQaUbCoE/PiliPlus/commit/$UPSTREAM_COMMIT"
+            echo "Upstream release: https://github.com/bggRGjQaUbCoE/PiliPlus/releases/tag/$UPSTREAM_RELEASE_TAG"
+            echo "Source: https://github.com/$GITHUB_REPOSITORY/commit/$COMMIT_SHA"
+            echo
+            echo "Upstream release notes ($UPSTREAM_RELEASE_TAG):"
+            echo
+            cat "$RUNNER_TEMP/upstream-release-notes.md"
+            echo
+            echo "Android APK and unsigned iOS IPA builds passed."
+          } > "$RUNNER_TEMP/release-notes.md"
+
           gh release create "$RELEASE_TAG" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$COMMIT_SHA" \
-            --title "$RELEASE_VERSION" \
-            --notes "Based on upstream release ${UPSTREAM_RELEASE_TAG}. Includes the native Bilibili-thread-ripper download layer with PiliPlus's original player retained, concurrent Range downloads, CDN candidate rotation, retries, and configurable overseas/mainland mode."
+            --title "PiliPlus Fork $RELEASE_VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
