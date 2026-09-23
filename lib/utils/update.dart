@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, File, Platform;
 
 import 'package:PiliPlus/build_config.dart';
 import 'package:PiliPlus/common/constants.dart';
@@ -13,9 +13,16 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:material_ui/material_ui.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 abstract final class Update {
+  static const _androidApkInstaller = MethodChannel(
+    'com.example.piliplus/apk_installer',
+  );
+
   // 检查更新
   static Future<void> checkUpdate([bool isAuto = true]) async {
     if (kDebugMode) return;
@@ -174,13 +181,18 @@ abstract final class Update {
   static Future<void> onDownload(Map data, {String? ext}) async {
     SmartDialog.dismiss();
     try {
-      void download(String plat) {
+      Future<void> download(String plat) async {
         if (data['assets'].isNotEmpty) {
           for (Map<String, dynamic> i in data['assets']) {
             final String name = i['name'];
             if (name.contains(plat) &&
                 (ext == null || ext.isEmpty ? true : name.endsWith(ext))) {
-              PageUtils.launchURL(i['browser_download_url']);
+              final url = i['browser_download_url'] as String;
+              if (Platform.isAndroid && name.toLowerCase().endsWith('.apk')) {
+                await _downloadAndInstallAndroidApk(url);
+              } else {
+                await PageUtils.launchURL(url);
+              }
               return;
             }
           }
@@ -192,13 +204,46 @@ abstract final class Update {
         // 获取设备信息
         AndroidDeviceInfo androidInfo = await DeviceInfoPlugin().androidInfo;
         // [arm64-v8a]
-        download(androidInfo.supportedAbis.first);
+        await download(androidInfo.supportedAbis.first);
       } else {
-        download(Platform.operatingSystem);
+        await download(Platform.operatingSystem);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('download error: $e');
       PageUtils.launchURL('${Constants.sourceCodeUrl}/releases/latest');
+    }
+  }
+
+  static Future<void> _downloadAndInstallAndroidApk(String url) async {
+    File? apkFile;
+    try {
+      final tempDirectory = await getTemporaryDirectory();
+      final updateDirectory = Directory(
+        p.join(tempDirectory.path, 'apk_updates'),
+      );
+      if (await updateDirectory.exists()) {
+        await updateDirectory.delete(recursive: true);
+      }
+      await updateDirectory.create(recursive: true);
+      apkFile = File(p.join(updateDirectory.path, 'update.apk'));
+
+      SmartDialog.showLoading(msg: '正在下载更新');
+      await Request.dio.download(url, apkFile.path, deleteOnError: true);
+      if (await apkFile.length() < 4) {
+        throw const FormatException('下载的 APK 文件无效');
+      }
+
+      SmartDialog.dismiss();
+      await _androidApkInstaller.invokeMethod<void>('installApk', {
+        'path': apkFile.path,
+      });
+    } catch (e) {
+      SmartDialog.dismiss();
+      if (apkFile != null && await apkFile.exists()) {
+        await apkFile.delete();
+      }
+      if (kDebugMode) debugPrint('APK update failed: $e');
+      SmartDialog.showToast('APK 下载或安装失败');
     }
   }
 }
