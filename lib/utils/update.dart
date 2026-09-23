@@ -40,11 +40,36 @@ abstract final class Update {
           ? data['name']
           : '${data['tag_name']}';
       final int? latestBuildCode = int.tryParse(releaseName.split('+').last);
-      final bool isLatest = latestBuildCode == null
+      final bool legacyIsLatest = latestBuildCode == null
           ? BuildConfig.buildTime >=
                 DateTime.parse(data['created_at']).millisecondsSinceEpoch ~/
                     1000
           : BuildConfig.versionCode >= latestBuildCode;
+      final String? currentUpstreamVersion = _leadingVersion(
+        BuildConfig.versionName,
+      );
+      final String? latestUpstreamVersion = _releaseUpstreamVersion(
+        data,
+        releaseName,
+      );
+      final String? releaseCommit = data['target_commitish'] is String
+          ? data['target_commitish'] as String
+          : null;
+      final bool hasCommitInfo =
+          releaseCommit != null &&
+          releaseCommit.isNotEmpty &&
+          BuildConfig.commitHash != 'N/A';
+      final bool isLatest;
+      if (currentUpstreamVersion != null && latestUpstreamVersion != null) {
+        final bool hasOfficialUpdate =
+            currentUpstreamVersion != latestUpstreamVersion;
+        isLatest = isAuto
+            ? !hasOfficialUpdate
+            : !hasOfficialUpdate &&
+                  (!hasCommitInfo || releaseCommit == BuildConfig.commitHash);
+      } else {
+        isLatest = legacyIsLatest;
+      }
       if (isLatest) {
         if (!isAuto) {
           SmartDialog.showToast('已是最新版本');
@@ -121,6 +146,28 @@ abstract final class Update {
     } catch (e) {
       if (kDebugMode) debugPrint('failed to check update: $e');
     }
+  }
+
+  static String? _leadingVersion(String value) =>
+      RegExp(r'^(\d+\.\d+\.\d+)').firstMatch(value.trim())?.group(1);
+
+  static String? _releaseUpstreamVersion(Map data, String releaseName) {
+    final String tag = data['tag_name'] is String
+        ? data['tag_name'] as String
+        : '';
+    final forkTagMatch = RegExp(
+      r'^v?(\d+\.\d+\.\d+)-fork\.\d+$',
+    ).firstMatch(tag);
+    if (forkTagMatch != null) return forkTagMatch.group(1);
+
+    final String body = data['body'] is String ? data['body'] as String : '';
+    final upstreamNoteMatch = RegExp(
+      r'based on upstream release\s+v?(\d+\.\d+\.\d+)',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (upstreamNoteMatch != null) return upstreamNoteMatch.group(1);
+
+    return _leadingVersion(releaseName);
   }
 
   // 下载适用于当前系统的安装包
