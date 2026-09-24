@@ -15,6 +15,7 @@ import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/video_utils.dart';
+import 'package:PiliPlus/services/thread_ripper/cdn_resolver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -64,14 +65,14 @@ List<SettingsModel> get videoSettings => [
   ),
   const SwitchModel(
     title: '线程撕裂者',
-    subtitle: '并发下载音视频，保留原播放器；下次加载视频生效',
+    subtitle: '0.9.4.2 下载核心，并发下载音视频；下次加载视频生效',
     leading: Icon(Icons.speed),
     setKey: SettingBoxKey.threadRipperEnabled,
     defaultVal: true,
   ),
   const SwitchModel(
     title: '线程撕裂者：海外节点',
-    subtitle: '开启优先海外节点，关闭优先大陆节点；下次加载生效',
+    subtitle: '开启优先海外节点，关闭优先大陆节点；自定义节点为空时生效',
     leading: Icon(Icons.public),
     setKey: SettingBoxKey.threadRipperOverseas,
     defaultVal: true,
@@ -83,6 +84,87 @@ List<SettingsModel> get videoSettings => [
     values: [4, 8, 16, 32, 64, 128],
     defaultValue: 8,
     isFilter: false,
+  ),
+  const SwitchModel(
+    title: '线程撕裂者：自动并发数',
+    subtitle: '根据卡顿和缓冲在 8–32 线程间调整；关闭时使用手动并发数，下次加载生效',
+    leading: Icon(Icons.auto_graph),
+    setKey: SettingBoxKey.threadRipperAutoConcurrency,
+    defaultVal: false,
+  ),
+  NormalModel(
+    title: '线程撕裂者：自定义节点',
+    leading: const Icon(Icons.dns_outlined),
+    getSubtitle: () => Pref.threadRipperCustomHosts.isEmpty
+        ? '未启用，使用大陆／海外节点；下次加载生效'
+        : '只使用 ${Pref.threadRipperCustomHosts.length} 个自定义节点；下次加载生效',
+    onTap: (context, setState) async {
+      var input = Pref.threadRipperCustomHosts.join('\n');
+      final form = GlobalKey<FormState>();
+      final result = await showDialog<List<String>>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('线程撕裂者：自定义节点'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: form,
+              child: TextFormField(
+                initialValue: input,
+                minLines: 3,
+                maxLines: 8,
+                onChanged: (value) => input = value,
+                decoration: const InputDecoration(
+                  hintText: 'upos-sz-mirroraliov.bilivideo.com',
+                  helperText: '每行一个 B站媒体节点，最多 32 个。\n清空恢复大陆／海外模式。',
+                ),
+                validator: (value) {
+                  final hosts = (value ?? '')
+                      .split(RegExp(r'[\s,，]+'))
+                      .where((s) => s.isNotEmpty)
+                      .toList();
+                  if (hosts.length > 32) return '最多添加 32 个节点';
+                  if (hosts.any(
+                    (host) => RipperCdnResolver.normalizeHost(host) == null,
+                  )) {
+                    return '请输入有效的 B站媒体服务器地址';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (form.currentState!.validate()) {
+                  Navigator.pop(
+                    context,
+                    input
+                        .split(RegExp(r'[\s,，]+'))
+                        .map(RipperCdnResolver.normalizeHost)
+                        .whereType<String>()
+                        .toSet()
+                        .toList(),
+                  );
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      );
+      if (result != null) {
+        await GStorage.setting.put(
+          SettingBoxKey.threadRipperCustomHosts,
+          result,
+        );
+        if (context.mounted) setState();
+      }
+    },
   ),
   NormalModel(
     title: '直播 CDN 设置',

@@ -285,6 +285,16 @@ abstract final class Pref {
       _setting.get(SettingBoxKey.threadRipperEnabled, defaultValue: true);
   static bool get threadRipperOverseas =>
       _setting.get(SettingBoxKey.threadRipperOverseas, defaultValue: true);
+  static bool get threadRipperAutoConcurrency => _setting.get(
+    SettingBoxKey.threadRipperAutoConcurrency,
+    defaultValue: false,
+  );
+  static List<String> get threadRipperCustomHosts => List<String>.from(
+    _setting.get(
+      SettingBoxKey.threadRipperCustomHosts,
+      defaultValue: <String>[],
+    ),
+  );
   static int get threadRipperConcurrency {
     final value = _setting.get(
       SettingBoxKey.threadRipperConcurrency,

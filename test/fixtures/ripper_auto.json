@@ -1,0 +1,1762 @@
+[
+  {
+    "at": 5000,
+    "op": "demand",
+    "args": [
+      8,
+      8,
+      12
+    ],
+    "threads": 8
+  },
+  {
+    "at": 5250,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 5250,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 5500,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 5500,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 5750,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 5750,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 6000,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 6000,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 6250,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 6250,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 6500,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 6500,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 6750,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 6750,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 7000,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 7000,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 7250,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 7250,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 7500,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 7500,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 7750,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 7750,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 8000,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 8000,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 8250,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 8250,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 8500,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 8500,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 8750,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 8750,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 9000,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 9000,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 9250,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 9250,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 9500,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 9500,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 9750,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 9750,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 10000,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 10000,
+    "op": "delivered",
+    "args": [
+      250000
+    ],
+    "threads": 8
+  },
+  {
+    "at": 10000,
+    "op": "stall",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 10000,
+    "op": "demand",
+    "args": [
+      12,
+      12,
+      12
+    ],
+    "threads": 12
+  },
+  {
+    "at": 10250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 10250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 10500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 10500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 10750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 10750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 11000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 11000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 11250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 11250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 11500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 11500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 11750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 11750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 12000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 12000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 12250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 12250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 12500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 12500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 12750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 12750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 13000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 13000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 13250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 13250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 13500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 13500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 13750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 13750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 14000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 14000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 14250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 14250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 14500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 14500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 14750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 14750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 15000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 15000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 15250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 15250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 15500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 15500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 15750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 15750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 16000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 16000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 16250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 16250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 16500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 16500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 16750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 16750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 17000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 17000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 17250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 17250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 17500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 17500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 17750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 17750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 18000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 18000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 18250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 18250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 18500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 18500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 18750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 18750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 19000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 19000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 19250,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 19250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 19500,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 19500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 19750,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 19750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 12
+  },
+  {
+    "at": 20000,
+    "op": "activity",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 20000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 8
+  },
+  {
+    "at": 20250,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 20250,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 8
+  },
+  {
+    "at": 20500,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 20500,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 8
+  },
+  {
+    "at": 20750,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 20750,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 8
+  },
+  {
+    "at": 21000,
+    "op": "activity",
+    "args": [],
+    "threads": 8
+  },
+  {
+    "at": 21000,
+    "op": "delivered",
+    "args": [
+      237500
+    ],
+    "threads": 8
+  },
+  {
+    "at": 24000,
+    "op": "stall",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 24000,
+    "op": "demand",
+    "args": [
+      16,
+      16,
+      12
+    ],
+    "threads": 16
+  },
+  {
+    "at": 24250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 24250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 24500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 24500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 24750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 24750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 25000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 25000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 25250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 25250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 25500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 25500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 25750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 25750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 26000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 26000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 26250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 26250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 26500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 26500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 26750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 26750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 27000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 27000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 27250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 27250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 27500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 27500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 27750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 27750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 28000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 28000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 28250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 28250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 28500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 28500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 28750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 28750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 29000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 29000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 29250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 29250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 29500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 29500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 29750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 29750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 30000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 30000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 30250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 30250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 30500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 30500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 30750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 30750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 31000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 31000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 31250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 31250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 31500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 31500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 31750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 31750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 32000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 32000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 32250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 32250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 32500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 32500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 32750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 32750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 33000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 33000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 33250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 33250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 33500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 33500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 33750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 33750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 34000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 34000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 34250,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 34250,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 34500,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 34500,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 34750,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 34750,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 35000,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 35000,
+    "op": "delivered",
+    "args": [
+      375000
+    ],
+    "threads": 16
+  },
+  {
+    "at": 35000,
+    "op": "pushback",
+    "args": [
+      429
+    ],
+    "threads": 12
+  },
+  {
+    "at": 38000,
+    "op": "stall",
+    "args": [],
+    "threads": 12
+  },
+  {
+    "at": 218001,
+    "op": "stall",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 218001,
+    "op": "newSession",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 218251,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 218251,
+    "op": "buffer",
+    "args": [
+      4,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 218501,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 218501,
+    "op": "buffer",
+    "args": [
+      3.9,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 218751,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 218751,
+    "op": "buffer",
+    "args": [
+      3.8,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 219001,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 219001,
+    "op": "buffer",
+    "args": [
+      3.7,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 219251,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 219251,
+    "op": "buffer",
+    "args": [
+      3.6,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 219501,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 219501,
+    "op": "buffer",
+    "args": [
+      3.5,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 219751,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 219751,
+    "op": "buffer",
+    "args": [
+      3.4,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 220001,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 220001,
+    "op": "buffer",
+    "args": [
+      3.3,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 220251,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 220251,
+    "op": "buffer",
+    "args": [
+      3.2,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 220501,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 220501,
+    "op": "buffer",
+    "args": [
+      3.1,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 220751,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 220751,
+    "op": "buffer",
+    "args": [
+      3,
+      true
+    ],
+    "threads": 16
+  },
+  {
+    "at": 221001,
+    "op": "activity",
+    "args": [],
+    "threads": 16
+  },
+  {
+    "at": 221001,
+    "op": "buffer",
+    "args": [
+      2.9,
+      true
+    ],
+    "threads": 16
+  }
+]

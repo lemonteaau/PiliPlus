@@ -86,6 +86,7 @@ void main() {
         File('test/fixtures/ripper_resolver.json').readAsStringSync(),
       ) as List;
       for (final fixture in fixtures) {
+        var now = DateTime.fromMillisecondsSinceEpoch(100000);
         final rep = fixture['representation'];
         final originals = <String>[
           rep['baseUrl'],
@@ -101,6 +102,7 @@ void main() {
           urls,
           originals: originals.map(Uri.parse).toList(),
           overseas: overseas,
+          now: () => now,
         );
         for (final step in fixture['steps']) {
           final args = step['args'] as List;
@@ -126,6 +128,15 @@ void main() {
                 status: args[1]['status'],
                 received: args[2],
               );
+            case 'sample':
+              resolver.sample(Uri.parse(args[0]), (args[1] as num).toDouble());
+            case 'advance':
+              now = now.add(Duration(milliseconds: args[0]));
+            case 'speed':
+              expect(
+                resolver.speed(Uri.parse(args[0])),
+                closeTo(step['expected'], 0.01),
+              );
           }
           if (result != null) {
             expect(
@@ -139,11 +150,75 @@ void main() {
     },
   );
 
+  test('weighted assignments match upstream including sparse exploration', () {
+    final fixtures = jsonDecode(
+      File('test/fixtures/ripper_assignments.json').readAsStringSync(),
+    ) as List;
+    final assignments = RipperAssignments();
+    for (final fixture in fixtures) {
+      final urls = (fixture['urls'] as List)
+          .cast<String>()
+          .map(Uri.parse)
+          .toList();
+      final resolver = RipperCdnResolver(urls);
+      for (var i = 0; i < urls.length; i++) {
+        resolver.recordSuccess(
+          urls[i],
+          (fixture['speeds'][i] as num).toDouble(),
+        );
+      }
+      for (final step in fixture['steps']) {
+        expect(
+          assignments
+              .assign(urls, resolver, step['count'])
+              .map((u) => u.toString())
+              .toList(),
+          step['expected'],
+        );
+      }
+    }
+  });
+
+  test('custom nodes restrict both synthesized URLs and originals', () {
+    final urls = RipperCdnResolver.candidates(
+      [
+        'https://video.akamaized.net/v.m4s?sign=a%2Bb',
+      ],
+      overseas: true,
+      customHosts: [
+        'https://UPOS-SZ-MIRRORALI.BILIVIDEO.COM:4483/path',
+        'example.com',
+      ],
+    );
+    expect(urls, hasLength(1));
+    expect(urls.single.host, 'upos-sz-mirrorali.bilivideo.com');
+    expect(urls.single.query, 'sign=a%2Bb');
+    expect(urls.single.port, 443);
+    expect(RipperCdnResolver.normalizeHost('bilivideo.com.evil.com'), isNull);
+    expect(RipperCdnResolver.normalizeHost('127.0.0.1'), isNull);
+  });
+
+  test('speed survives signature refresh but expires and tiny tails do not renew it', () {
+    var now = DateTime.fromMillisecondsSinceEpoch(100000);
+    final url = Uri.parse('https://a.bilivideo.com/v.m4s?sign=old');
+    final fresh = url.replace(query: 'sign=new');
+    final resolver = RipperCdnResolver([url], now: () => now)
+      ..success(url, 100000, const Duration(seconds: 1));
+    expect(resolver.speed(fresh), 100000);
+    now = now.add(const Duration(seconds: 89));
+    resolver.success(fresh, 1024, const Duration(seconds: 1));
+    expect(resolver.speed(fresh), 100000);
+    now = now.add(const Duration(seconds: 2));
+    expect(resolver.speed(fresh), 0);
+  });
+
   late HttpServer cdn;
   late HttpClient client;
   late RipperRangeProxy proxy;
   late Uint8List source;
   late List<String> paths;
+  late List<(String, int, int)> requests;
+  late Set<int> interruptedEnds;
   late int active;
   late int peak;
   late List<Timer> timers;
@@ -151,6 +226,8 @@ void main() {
   setUp(() async {
     source = Uint8List.fromList(List.generate(1100000, (i) => (i * 37) % 251));
     paths = [];
+    requests = [];
+    interruptedEnds = {};
     timers = [];
     active = peak = 0;
     cdn = await HttpServer.bind(InternetAddress.loopbackIPv4, 0)
@@ -168,6 +245,7 @@ void main() {
             source.length,
           );
           final (start, end) = range;
+          requests.add((request.uri.path, start, end));
           if (request.uri.path == '/forbidden') {
             response.statusCode = 403;
             await response.close();
@@ -190,6 +268,32 @@ void main() {
             'bytes $reportedStart-$end/$reportedTotal',
           );
           var body = source.sublist(start, end + 1);
+          if (request.uri.path == '/resume-primary' &&
+              start >= 65536 &&
+              body.length > 65536) {
+            response.add(body.sublist(0, 65536));
+            await response.flush();
+            timers.add(
+              Timer(const Duration(seconds: 3), () {
+                try {
+                  response.add(body.sublist(65536));
+                  unawaited(response.close().catchError((Object _) {}));
+                } catch (_) {}
+              }),
+            );
+            return;
+          }
+          if (request.uri.path == '/resume' &&
+              start >= 65536 &&
+              body.length > 65536 &&
+              interruptedEnds.add(end)) {
+            response.add(body.sublist(0, 65536));
+            await response.flush();
+            // Verified headers, then an interrupted body. The next request must
+            // start at the last received byte, even on another CDN.
+            await response.close();
+            return;
+          }
           if (request.uri.path == '/short') {
             body = body.sublist(0, body.length ~/ 2);
           }
@@ -205,7 +309,9 @@ void main() {
 
           if (request.uri.path == '/primary' && start >= 65536) {
             timers.add(Timer(const Duration(seconds: 10), send));
-          } else if (request.uri.path == '/rescue' && start < 65536) {
+          } else if ((request.uri.path == '/rescue' ||
+                  request.uri.path == '/resume-backup') &&
+              start < 65536) {
             timers.add(Timer(const Duration(milliseconds: 500), send));
           } else if (request.uri.path == '/jam' && end > start) {
             timers.add(Timer(const Duration(seconds: 10), send));
@@ -405,5 +511,42 @@ void main() {
     final result = await fetch(register(['/good']));
     expect(result.$2, source);
     expect(paths.length, lessThanOrEqualTo(10));
+  });
+
+  test(
+    'interrupted verified pieces resume without dropping or repeating bytes',
+    () async {
+      proxy.close();
+      proxy = RipperRangeProxy(concurrency: 8, userAgent: 'test');
+      await proxy.start();
+      final result = await fetch(register(['/resume']));
+      expect(result.$2, source);
+      final pieces = requests.where((r) => r.$2 >= 65536).toList();
+      expect(
+        pieces.any(
+          (a) => pieces.any((b) => a.$3 == b.$3 && b.$2 == a.$2 + 65536),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test('hedge resumes the live primary prefix on a different node', () async {
+    final watch = Stopwatch()..start();
+    final result = await fetch(register(['/resume-primary', '/resume-backup']));
+    expect(result.$2, source);
+    expect(watch.elapsed, lessThan(const Duration(seconds: 3)));
+    final originals = requests.where(
+      (r) => r.$1 == '/resume-primary' && r.$2 >= 65536,
+    );
+    expect(
+      originals.any(
+        (a) => requests.any(
+          (b) =>
+              b.$1 == '/resume-backup' && b.$3 == a.$3 && b.$2 == a.$2 + 65536,
+        ),
+      ),
+      isTrue,
+    );
   });
 }

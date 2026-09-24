@@ -5,20 +5,48 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:PiliPlus/services/thread_ripper/auto_concurrency.dart';
 import 'package:PiliPlus/services/thread_ripper/cdn_resolver.dart';
 
 class RipperRangeProxy {
   RipperRangeProxy({
-    this.concurrency = 8,
+    int concurrency = 8,
     this.overseas = true,
+    this.customHosts = const [],
+    this.autoConcurrency,
     required this.userAgent,
     this.referer = 'https://www.bilibili.com/',
     this.onActiveRequestsChanged,
-  }) : assert(concurrency > 0 && concurrency <= 128);
+  }) : _fixedConcurrency = concurrency,
+       assert(concurrency > 0 && concurrency <= 128);
 
   final void Function(int active)? onActiveRequestsChanged;
-  final int concurrency;
+  final int _fixedConcurrency;
+  final RipperAutoConcurrency? autoConcurrency;
+  int get concurrency => autoConcurrency?.threads ?? _fixedConcurrency;
   final bool overseas;
+  final List<String> customHosts;
+  final _assignments = RipperAssignments();
+  double _connectionBps = 0;
+  double _pieceMs = 0;
+  int get _hedgeMs =>
+      _pieceMs == 0 ? 900 : (_pieceMs * 1.5).round().clamp(250, 900);
+
+  void _measure(int bytes, Duration elapsed) {
+    if (bytes < 48 * 1024 || elapsed.inMicroseconds <= 0) return;
+    final ms = elapsed.inMicroseconds / 1000;
+    final bps = bytes * 1000 / ms;
+    _connectionBps = _connectionBps == 0 ? bps : _connectionBps * .7 + bps * .3;
+    _pieceMs = _pieceMs == 0 ? ms : _pieceMs * .7 + ms * .3;
+  }
+
+  int _minChunk(int length, int budget, int hosts) {
+    if (_connectionBps == 0) return 64 * 1024;
+    final target = (_connectionBps * .6 / (64 * 1024)).floor() * 64 * 1024;
+    final spread = (length / max(1, min(max(4, hosts), budget))).ceil();
+    return max(64 * 1024, min(1024 * 1024, min(target, spread)));
+  }
+
   final String userAgent;
   final String referer;
   final _tracks = <String, _Track>{};
@@ -49,6 +77,8 @@ class RipperRangeProxy {
       throw StateError('Download session closed');
     }
     _server = server;
+    autoConcurrency?.newSession();
+    autoConcurrency?.onChanged = _drain;
     // Transport disconnects can also fail response.close(); each request owns
     // its cleanup in finally, so never leak those errors to the app's zone.
     server.listen((request) => _serve(request).ignore());
@@ -59,9 +89,19 @@ class RipperRangeProxy {
         .map(Uri.parse)
         .where(RipperCdnResolver.supports)
         .toList();
+    final candidates = RipperCdnResolver.candidates(
+      urls,
+      overseas: overseas,
+      customHosts: customHosts,
+    );
     return registerCandidates(
-      RipperCdnResolver.candidates(urls, overseas: overseas),
-      originals: originals,
+      candidates,
+      originals:
+          customHosts.any(
+            (host) => RipperCdnResolver.normalizeHost(host) != null,
+          )
+          ? candidates
+          : originals,
       isAudio: isAudio,
     );
   }
@@ -80,7 +120,11 @@ class RipperRangeProxy {
       RipperCdnResolver(
         urls,
         bans: _bans,
-        overseas: overseas,
+        overseas:
+            overseas ||
+            customHosts.any(
+              (host) => RipperCdnResolver.normalizeHost(host) != null,
+            ),
         originals: originals,
       ),
       isAudio,
@@ -91,6 +135,8 @@ class RipperRangeProxy {
   void close() {
     if (_closed) return;
     _closed = true;
+    autoConcurrency?.onChanged = null;
+    autoConcurrency?.demand(0, concurrency, 0);
     for (final job in _jobs.toList()) {
       job.cancel();
     }
@@ -130,6 +176,7 @@ class RipperRangeProxy {
   }
 
   void _drain() {
+    if (_closed) return;
     _waiters.sort((a, b) {
       final priority = b.priority.compareTo(a.priority);
       return priority != 0 ? priority : a.sequence.compareTo(b.sequence);
@@ -138,13 +185,14 @@ class RipperRangeProxy {
       final index = _waiters.indexWhere(
         (w) => w.rescue || _normalActive < _normalLimit,
       );
-      if (index < 0) return;
+      if (index < 0) break;
       final waiter = _waiters.removeAt(index);
       _active++;
       onActiveRequestsChanged?.call(_active);
       if (!waiter.rescue) _normalActive++;
       waiter.ready.complete();
     }
+    autoConcurrency?.demand(_active, concurrency, _waiters.length);
   }
 
   void _release({required bool rescue}) {
@@ -162,6 +210,9 @@ class RipperRangeProxy {
     _Job job, {
     required bool rescue,
     required int priority,
+    _Resume? resume,
+    _Receiving? receiving,
+    _Receiving? primary,
   }) async {
     await _slot(job, rescue: rescue, priority: priority);
     HttpClientRequest? request;
@@ -172,6 +223,18 @@ class RipperRangeProxy {
     bool completed = false;
     try {
       job.check();
+      // Take a snapshot only after obtaining a slot: the primary may have made
+      // progress while its backup waited in the queue.
+      if (receiving != null && resume != null) {
+        resume.keep(primary?.snapshot());
+        final prefix = resume.prefix;
+        if (prefix != null &&
+            prefix.length >= 32 * 1024 &&
+            prefix.length < end - start + 1) {
+          receiving.base = prefix;
+          start += prefix.length;
+        }
+      }
       request = await _client
           .getUrl(url)
           .timeout(const Duration(milliseconds: 5500));
@@ -202,24 +265,44 @@ class RipperRangeProxy {
       if (total <= end || (track.total != null && total != track.total)) {
         throw const HttpException('Inconsistent CDN resource length');
       }
+      // Establish resource identity before retaining a partial response.
+      track.total ??= total;
       final bytes = BytesBuilder(copy: false);
       await for (final chunk in response.timeout(const Duration(seconds: 4))) {
         job.check();
         received += chunk.length;
+        autoConcurrency?.activity();
         bytes.add(chunk);
         if (bytes.length > end - start + 1) {
+          receiving?.chunks.clear();
           throw const HttpException('Oversized CDN Range body');
         }
+        receiving?.chunks.add(chunk);
       }
       if (bytes.length != end - start + 1) {
         throw const HttpException('Truncated CDN Range body');
       }
       completed = true;
+      _measure(received, clock.elapsed);
       track.resolver.success(url, bytes.length, clock.elapsed);
-      return _Piece(bytes.takeBytes(), total, url);
-    } catch (_) {
+      final result = BytesBuilder(copy: false);
+      if (receiving?.base case final base?) result.add(base);
+      result.add(bytes.takeBytes());
+      return _Piece(result.takeBytes(), total, url);
+    } catch (error) {
+      if (receiving != null) resume?.keep(receiving.snapshot());
       if (!job.cancelled) {
         track.resolver.failure(url, status: status, received: received);
+        if (status == 412 || status == 429) {
+          autoConcurrency?.pushback();
+        } else if (received == 0 && error is TimeoutException) {
+          autoConcurrency?.slow();
+        }
+      } else if (received >= 48 * 1024) {
+        track.resolver.sample(
+          url,
+          received * 1000000 / max(1, clock.elapsedMicroseconds),
+        );
       }
       rethrow;
     } finally {
@@ -242,11 +325,13 @@ class RipperRangeProxy {
     bool metadata = false,
     bool startup = false,
     bool hurry = false,
+    _Resume? resume,
   }) async {
     final result = Completer<_Piece>();
     final jobs = <_Job>[];
     final timers = <Timer>[];
     final launched = <int>{};
+    final receiving = List.generate(urls.length, (_) => _Receiving());
     int failures = 0;
     void launch(int index) {
       if (result.isCompleted || parent.cancelled || !launched.add(index)) {
@@ -263,6 +348,9 @@ class RipperRangeProxy {
         job,
         rescue: index > 0,
         priority: priority + (index > 0 && !metadata ? 20 : 0),
+        resume: resume,
+        receiving: metadata ? null : receiving[index],
+        primary: index > 0 ? receiving.first : null,
       ).then(
         (piece) {
           if (!result.isCompleted) result.complete(piece);
@@ -284,8 +372,8 @@ class RipperRangeProxy {
           : startup
           ? 0
           : hurry
-          ? 250
-          : 900;
+          ? min(250, _hedgeMs)
+          : _hedgeMs;
       if (delay == 0) {
         launch(i);
       } else {
@@ -318,6 +406,7 @@ class RipperRangeProxy {
     bool hurry = false,
   }) async {
     final clock = Stopwatch()..start();
+    final resume = _Resume(end - start + 1);
     Object error = const HttpException('No available CDN');
     for (var round = 0; round < 3; round++) {
       job.check();
@@ -367,7 +456,7 @@ class RipperRangeProxy {
         if (pair.isEmpty) break;
         tried.addAll(pair);
         try {
-          return await _race(
+          final piece = await _race(
             track,
             pair,
             start,
@@ -376,7 +465,11 @@ class RipperRangeProxy {
             priority: priority,
             startup: startup,
             hurry: hurry,
+            resume: resume,
           );
+          job.check();
+          autoConcurrency?.delivered(piece.bytes.length);
+          return piece;
         } catch (e) {
           error = e;
         }
@@ -450,34 +543,58 @@ class RipperRangeProxy {
         await response.flush();
         var cursor = headEnd + 1;
         var index = 1;
-        final audioBudget = max(1, min(_normalLimit, (concurrency / 8).ceil()));
-        final budget = track.isAudio
-            ? audioBudget
-            : max(1, _normalLimit - audioBudget);
+        int pieceBudget() {
+          final audioBudget = max(
+            1,
+            min(_normalLimit, (concurrency / 8).ceil()),
+          );
+          return track.isAudio
+              ? audioBudget
+              : max(1, _normalLimit - audioBudget);
+        }
+
+        var budget = pieceBudget();
         var preferred = <Uri>[head.url];
+        var primaries = <Uri>[];
+        var batchIndex = 0;
+        var size = 64 * 1024;
         final pieces = <Future<(_Piece?, Object?, StackTrace?)>>[];
         void enqueue() {
           if (cursor > end) return;
-          if (index > budget && (index - 1) % budget == 0) {
+          if (batchIndex >= primaries.length) {
+            final startupBatch = index <= budget;
             preferred = track.resolver.rangeCandidates();
+            final proven = startupBatch
+                ? preferred
+                      .where(
+                        (url) =>
+                            url == head.url || track.resolver.speed(url) > 0,
+                      )
+                      .toList()
+                : preferred;
+            if (proven.isEmpty) proven.add(head.url);
+            final window = min(
+              end - cursor + 1,
+              track.isAudio ? budget * 64 * 1024 : 2 * 1024 * 1024 - 64 * 1024,
+            );
+            final floor = _minChunk(window, budget, preferred.length);
+            final count = min(budget, max(1, (window / floor).ceil()));
+            size = (window / count).ceil();
+            primaries = _assignments.assign(proven, track.resolver, count);
+            batchIndex = 0;
           }
           // Native mpv requests are open-ended rather than SIDX segments.
           // Partition a bounded 2 MiB video window over the same piece budget
           // instead of turning the upstream 64 KiB minimum into a fixed size.
-          final size = track.isAudio
-              ? 64 * 1024
-              : max(
-                  64 * 1024,
-                  (2 * 1024 * 1024 - 64 * 1024 + budget - 1) ~/ budget,
-                );
           final last = min(end, cursor + size - 1);
+          final primary = primaries[batchIndex++];
           pieces.add(
             _download(
               track,
               cursor,
               last,
               job,
-              preferred: preferred,
+              preferred: [primary, ...preferred.where((url) => url != primary)],
               pieceIndex: index,
               hurry: index <= budget,
               priority: index <= budget
@@ -505,7 +622,10 @@ class RipperRangeProxy {
           sentHeaders = true;
           await response.flush();
           job.check();
-          enqueue();
+          budget = pieceBudget();
+          while (pieces.length < budget && cursor <= end) {
+            enqueue();
+          }
         }
       }
       await response.close();
@@ -577,6 +697,33 @@ class _Piece {
   final Uri url;
   final Uint8List bytes;
   final int total;
+}
+
+class _Resume {
+  _Resume(this.length);
+  final int length;
+  Uint8List? prefix;
+
+  void keep(Uint8List? bytes) {
+    if (bytes != null &&
+        bytes.length > (prefix?.length ?? 0) &&
+        bytes.length < length) {
+      prefix = bytes;
+    }
+  }
+}
+
+class _Receiving {
+  Uint8List? base;
+  final chunks = <List<int>>[];
+  Uint8List snapshot() {
+    final bytes = BytesBuilder(copy: false);
+    if (base != null) bytes.add(base!);
+    for (final chunk in chunks) {
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
+  }
 }
 
 class _Job {

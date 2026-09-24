@@ -28,6 +28,7 @@ import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/video_fit_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
+import 'package:PiliPlus/services/thread_ripper/auto_concurrency.dart';
 import 'package:PiliPlus/services/thread_ripper/range_proxy.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/utils/accounts.dart';
@@ -671,6 +672,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   RipperRangeProxy? _ripperProxy;
+  final _ripperAutoConcurrency = RipperAutoConcurrency();
   int _ripperGeneration = 0;
 
   String? shadersDirPath;
@@ -815,6 +817,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       final proxy = RipperRangeProxy(
         concurrency: Pref.threadRipperConcurrency,
         overseas: Pref.threadRipperOverseas,
+        customHosts: Pref.threadRipperCustomHosts,
+        autoConcurrency: Pref.threadRipperAutoConcurrency
+            ? _ripperAutoConcurrency
+            : null,
         userAgent: BrowserUa.pc,
       );
       _ripperProxy = proxy;
@@ -985,6 +991,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
       /// position
       stream.position.listen((Duration position) {
+        _ripperProxy?.autoConcurrency?.buffer(
+          (player.state.buffer - position).inMilliseconds / 1000,
+          player.state.playing,
+        );
         final posInSeconds = position.inSeconds;
 
         if (posInSeconds != this.position.value) {
@@ -1006,6 +1016,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         buffered.value = buffer.inSeconds;
       }),
       stream.buffering.listen((bool buffering) {
+        if (buffering &&
+            !isBuffering.value &&
+            player.state.playing &&
+            player.state.position > Duration.zero) {
+          _ripperProxy?.autoConcurrency?.stall();
+        }
         isBuffering.value = buffering;
         if (!playerStatus.isCompleted) {
           _stopWakeLockTimer();

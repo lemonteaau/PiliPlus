@@ -4,6 +4,8 @@ abstract final class SettingBoxKey {
   static const threadRipperEnabled = 'threadRipperEnabled';
   static const threadRipperOverseas = 'threadRipperOverseas';
   static const threadRipperConcurrency = 'threadRipperConcurrency';
+  static const threadRipperAutoConcurrency = 'threadRipperAutoConcurrency';
+  static const threadRipperCustomHosts = 'threadRipperCustomHosts';
   static const String btmProgressBehavior = 'btmProgressBehavior',
       defaultVideoQa = 'defaultVideoQa',
       defaultVideoQaCellular = 'defaultVideoQaCellular',
