@@ -210,5 +210,5 @@ jobs:
           gh release create "$RELEASE_TAG" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$COMMIT_SHA" \
-            --title "PiliPlus Fork $RELEASE_VERSION" \
+            --title "PiliPlus $RELEASE_VERSION" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
