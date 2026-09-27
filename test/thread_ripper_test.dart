@@ -377,6 +377,22 @@ void main() {
     },
   );
 
+  test('a request from the file start needs no separate probe', () async {
+    final result = await fetch(register(['/good']));
+    expect(result.$2, source);
+    expect(requests.first, ('/good', 0, 65535));
+    expect(requests.where((r) => r.$2 == 0 && r.$3 == 0), isEmpty);
+  });
+
+  test('a file shorter than the probe is served whole', () async {
+    source = Uint8List.fromList(List.generate(1000, (i) => i % 251));
+    final url = register(['/good']);
+    final whole = await fetch(url);
+    expect(whole.$1.statusCode, 200);
+    expect(whole.$2, source);
+    expect((await fetch(url, range: 'bytes=10-99')).$2, source.sublist(10, 100));
+  });
+
   test('HEAD, suffix, open-ended seek and 416 responses', () async {
     final url = register(['/good']);
     final head = await fetch(url, method: 'HEAD');

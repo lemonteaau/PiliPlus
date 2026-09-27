@@ -211,6 +211,7 @@ class RipperRangeProxy {
     _Job job, {
     required bool rescue,
     required int priority,
+    bool clip = false,
     _Resume? resume,
     _Receiving? receiving,
     _Receiving? primary,
@@ -256,6 +257,12 @@ class RipperRangeProxy {
       final match = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$').firstMatch(
         response.headers.value(HttpHeaders.contentRangeHeader) ?? '',
       );
+      if (clip && match != null) {
+        // A probe may reach past the end of a file shorter than itself; the
+        // CDN then sends the bytes that exist.
+        final last = int.parse(match[3]!) - 1;
+        if (int.parse(match[2]!) == last && last < end) end = last;
+      }
       if (response.statusCode != 206 ||
           match == null ||
           int.parse(match[1]!) != start ||
@@ -349,6 +356,7 @@ class RipperRangeProxy {
         job,
         rescue: index > 0,
         priority: priority + (index > 0 && !metadata ? 20 : 0),
+        clip: metadata,
         resume: resume,
         receiving: metadata ? null : receiving[index],
         primary: index > 0 ? receiving.first : null,
@@ -534,12 +542,22 @@ class RipperRangeProxy {
 
     bool sentHeaders = false;
     try {
+      final range = request.headers.value(HttpHeaders.rangeHeader);
+      _Piece? probe;
       if (track.total == null) {
-        final probe = await _download(track, 0, 0, job, metadata: true);
+        // mpv opens a track from byte 0. The probe then fetches the first
+        // 64 KiB and doubles as the head, saving a round trip.
+        final fromStart = range == null || range.startsWith('bytes=0-');
+        probe = await _download(
+          track,
+          0,
+          fromStart ? 64 * 1024 - 1 : 0,
+          job,
+          metadata: true,
+        );
         track.total = probe.total;
       }
       final total = track.total!;
-      final range = request.headers.value(HttpHeaders.rangeHeader);
       final (start, end) = parseRange(range, total);
       final status = range == null ? HttpStatus.ok : HttpStatus.partialContent;
       final contentRange = range == null ? null : 'bytes $start-$end/$total';
@@ -553,15 +571,21 @@ class RipperRangeProxy {
         // waiting for the slowest member of a batch. Larger steady-state
         // pieces amortize overseas request latency; keep the first one small.
         final headEnd = min(end, start + 64 * 1024 - 1);
-        final head = await _download(
-          track,
-          start,
-          headEnd,
-          job,
-          preferred: track.resolver.rangeCandidates(),
-          startup: true,
-          priority: 220,
-        );
+        final head = probe != null && start == 0 && probe.bytes.length > headEnd
+            ? _Piece(
+                Uint8List.sublistView(probe.bytes, 0, headEnd + 1),
+                total,
+                probe.url,
+              )
+            : await _download(
+                track,
+                start,
+                headEnd,
+                job,
+                preferred: track.resolver.rangeCandidates(),
+                startup: true,
+                priority: 220,
+              );
         job.check();
         writeHead(status, end - start + 1, contentRange);
         socket.add(head.bytes);
