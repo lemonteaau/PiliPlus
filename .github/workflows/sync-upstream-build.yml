@@ -48,6 +48,8 @@ jobs:
           upstream_release_tag="$(gh api repos/bggRGjQaUbCoE/PiliPlus/releases/latest --jq .tag_name)"
           upstream_version="${upstream_release_tag#v}"
           before="$(git rev-parse HEAD)"
+          # The fork keeps its own README (.gitattributes: merge=ours).
+          git config merge.ours.driver true
           git merge --no-edit upstream/main
           after="$(git rev-parse HEAD)"
           upstream_commit="$(git rev-parse upstream/main)"
