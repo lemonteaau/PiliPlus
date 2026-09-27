@@ -674,6 +674,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   RipperRangeProxy? _ripperProxy;
   final _ripperAutoConcurrency = RipperAutoConcurrency();
   int _ripperGeneration = 0;
+  // A seek or (re)open restarts playback. Its buffering is not a download
+  // stall (upstream ignores waiting while video.seeking); cleared once
+  // buffering ends.
+  bool _ripperRestarting = false;
 
   String? shadersDirPath;
   Future<String> get copyShadersToExternalDirectory async {
@@ -864,6 +868,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     assert(!isLive || seekTo == null);
+    _ripperRestarting = true;
     await player.open(
       Media(
         video,
@@ -881,6 +886,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (_videoPlayerController case final ctr? when (ctr.current.isNotEmpty)) {
       var media = ctr.current.last;
       if (!isLive) media = media.copyWith(start: ctr.state.position);
+      _ripperRestarting = true;
       return ctr.open(media, play: true);
     }
     return null;
@@ -993,7 +999,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       stream.position.listen((Duration position) {
         _ripperProxy?.autoConcurrency?.buffer(
           (player.state.buffer - position).inMilliseconds / 1000,
-          player.state.playing,
+          player.state.playing && !_ripperRestarting,
         );
         final posInSeconds = position.inSeconds;
 
@@ -1018,10 +1024,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       stream.buffering.listen((bool buffering) {
         if (buffering &&
             !isBuffering.value &&
+            !_ripperRestarting &&
             player.state.playing &&
             player.state.position > Duration.zero) {
           _ripperProxy?.autoConcurrency?.stall();
         }
+        if (!buffering) _ripperRestarting = false;
         isBuffering.value = buffering;
         if (!playerStatus.isCompleted) {
           _stopWakeLockTimer();
@@ -1118,6 +1126,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       await _videoPlayerController?.stream.buffer.first;
     }
     danmakuController?.clear();
+    _ripperRestarting = true;
     try {
       await _videoPlayerController?.seek(position);
     } catch (e) {
