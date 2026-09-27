@@ -237,9 +237,10 @@ class RipperRangeProxy {
           start += prefix.length;
         }
       }
-      request = await _client
-          .getUrl(url)
-          .timeout(const Duration(milliseconds: 5500));
+      // Like upstream, one first-byte timeout covers connecting and the
+      // response head together.
+      const firstByte = Duration(milliseconds: 5500);
+      request = await _client.getUrl(url).timeout(firstByte);
       job.check();
       job.requests.add(request);
       deadline = Timer(const Duration(seconds: 15), () {
@@ -251,7 +252,7 @@ class RipperRangeProxy {
         ..set(HttpHeaders.userAgentHeader, userAgent)
         ..set(HttpHeaders.refererHeader, referer);
       final response = await request.close().timeout(
-        const Duration(milliseconds: 5500),
+        firstByte - clock.elapsed,
       );
       status = response.statusCode;
       final match = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$').firstMatch(
