@@ -1,6 +1,7 @@
 // Native download-layer adaptation of Bilibili-thread-ripper (MIT).
 // The existing media_kit player continues to demux, decode, seek and render.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -480,27 +481,57 @@ class RipperRangeProxy {
   }
 
   Future<void> _serve(HttpRequest request) async {
-    final response = request.response;
     final track = _tracks[request.uri.path];
     if (track == null || _closed) {
-      response.statusCode = HttpStatus.notFound;
-      await response.close();
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
       return;
     }
     if (request.method != 'GET' && request.method != 'HEAD') {
-      response.statusCode = HttpStatus.methodNotAllowed;
-      await response.close();
+      request.response.statusCode = HttpStatus.methodNotAllowed;
+      await request.response.close();
+      return;
+    }
+    // dart:io never tells a handler that its client went away: writes to the
+    // dead connection are dropped or flush() never returns, and response.done
+    // only completes on close(). Own the socket instead, so that mpv closing
+    // it (a seek, a demuxer reopen) ends this request's downloads at once.
+    final Socket socket;
+    try {
+      socket = await request.response.detachSocket(writeHeaders: false);
+    } catch (_) {
       return;
     }
     final job = _Job();
     _jobs.add(job);
-    // A seek closes the old HTTP response and cancels all queued/in-flight work.
-    unawaited(
-      response.done.then(
-        (_) => job.cancel(),
-        onError: (Object _) => job.cancel(),
-      ),
+    job._listeners.add(socket.destroy);
+    if (request.method == 'GET') {
+      // mpv reads a track over one connection. Its next request (a seek or a
+      // reopen) arrives before it closes the old one; stop the old one now.
+      track.request?.cancel();
+      track.request = job;
+    }
+    socket.listen(
+      null,
+      onError: (Object _) => job.cancel(),
+      onDone: job.cancel,
+      cancelOnError: true,
     );
+    unawaited(socket.done.then((_) {}, onError: (Object _) => job.cancel()));
+    void writeHead(int status, int length, [String? contentRange]) {
+      socket.add(
+        ascii.encode(
+          'HTTP/1.1 $status ${_reasons[status]}\r\n'
+          'Content-Type: application/octet-stream\r\n'
+          'Accept-Ranges: bytes\r\n'
+          'Content-Length: $length\r\n'
+          '${contentRange == null ? '' : 'Content-Range: $contentRange\r\n'}'
+          'Connection: close\r\n'
+          '\r\n',
+        ),
+      );
+    }
+
     bool sentHeaders = false;
     try {
       if (track.total == null) {
@@ -510,18 +541,12 @@ class RipperRangeProxy {
       final total = track.total!;
       final range = request.headers.value(HttpHeaders.rangeHeader);
       final (start, end) = parseRange(range, total);
-      response.headers
-        ..set(HttpHeaders.acceptRangesHeader, 'bytes')
-        ..set(HttpHeaders.contentTypeHeader, 'application/octet-stream');
-      response.contentLength = end - start + 1;
-      if (range != null) {
-        response.statusCode = HttpStatus.partialContent;
-        response.headers.set(
-          HttpHeaders.contentRangeHeader,
-          'bytes $start-$end/$total',
-        );
-      }
-      if (request.method != 'HEAD') {
+      final status = range == null ? HttpStatus.ok : HttpStatus.partialContent;
+      final contentRange = range == null ? null : 'bytes $start-$end/$total';
+      if (request.method == 'HEAD') {
+        writeHead(status, end - start + 1, contentRange);
+        sentHeaders = true;
+      } else {
         // A bounded window prevents mpv's open-ended ranges from buffering an
         // entire movie in memory. Flush in file order with socket backpressure.
         // Sliding bounded window: refill after each emitted piece, without
@@ -538,9 +563,10 @@ class RipperRangeProxy {
           priority: 220,
         );
         job.check();
-        response.add(head.bytes);
+        writeHead(status, end - start + 1, contentRange);
+        socket.add(head.bytes);
         sentHeaders = true;
-        await response.flush();
+        await job.race(socket.flush());
         var cursor = headEnd + 1;
         var index = 1;
         int pieceBudget() {
@@ -618,9 +644,8 @@ class RipperRangeProxy {
           if (piece!.total != total) {
             throw const HttpException('Resource changed');
           }
-          response.add(piece.bytes);
-          sentHeaders = true;
-          await response.flush();
+          socket.add(piece.bytes);
+          await job.race(socket.flush());
           job.check();
           budget = pieceBudget();
           while (pieces.length < budget && cursor <= end) {
@@ -628,36 +653,38 @@ class RipperRangeProxy {
           }
         }
       }
-      await response.close();
+      await job.race(socket.close());
     } on FormatException {
-      response
-        ..statusCode = HttpStatus.requestedRangeNotSatisfiable
-        ..contentLength = 0;
-      response.headers.set(
-        HttpHeaders.contentRangeHeader,
-        'bytes */${track.total}',
-      );
-      await response.close();
+      try {
+        writeHead(
+          HttpStatus.requestedRangeNotSatisfiable,
+          0,
+          'bytes */${track.total}',
+        );
+        await job.race(socket.close());
+      } catch (_) {}
     } catch (_) {
+      // After the headers, the reset in finally makes a truncated byte stream
+      // visible to mpv instead of pretending it completed.
       if (!sentHeaders) {
         try {
-          response
-            ..statusCode = HttpStatus.badGateway
-            ..contentLength = 0;
-          await response.close();
-        } catch (_) {}
-      } else {
-        // Never pretend a truncated byte stream completed successfully.
-        try {
-          final socket = await response.detachSocket(writeHeaders: false);
-          socket.destroy();
+          writeHead(HttpStatus.badGateway, 0);
+          await job.race(socket.close());
         } catch (_) {}
       }
     } finally {
       job.cancel();
       _jobs.remove(job);
+      if (identical(track.request, job)) track.request = null;
     }
   }
+
+  static const _reasons = {
+    HttpStatus.ok: 'OK',
+    HttpStatus.partialContent: 'Partial Content',
+    HttpStatus.requestedRangeNotSatisfiable: 'Range Not Satisfiable',
+    HttpStatus.badGateway: 'Bad Gateway',
+  };
 
   static (int, int) parseRange(String? value, int total) {
     if (value == null) return (0, total - 1);
@@ -690,6 +717,7 @@ class _Track {
   final bool isAudio;
   final RipperCdnResolver resolver;
   int? total;
+  _Job? request;
 }
 
 class _Piece {

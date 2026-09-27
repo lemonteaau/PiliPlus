@@ -363,10 +363,10 @@ void main() {
   test(
     'parallel chunks arrive in exact file order with shared connection limit',
     () async {
-      final url = register(['/good']);
+      // Two tracks: a newer request on the same track replaces the older one.
       final results = await Future.wait([
-        fetch(url),
-        fetch(url, range: 'bytes=3-800000'),
+        fetch(register(['/good'])),
+        fetch(register(['/good']), range: 'bytes=3-800000'),
       ]);
       expect(results[0].$1.statusCode, 200);
       expect(results[0].$2, source);
@@ -458,6 +458,11 @@ void main() {
   test(
     'a seek disconnect stops old work and new ranges remain usable',
     () async {
+      // Several windows long: work that outlived the disconnect would go on
+      // to request ranges past the first window.
+      source = Uint8List.fromList(
+        List.generate(6 * 1024 * 1024, (i) => (i * 37) % 251),
+      );
       final url = Uri.parse(register(['/seek']));
       final socket = await Socket.connect(url.host, url.port);
       socket.write('GET ${url.path} HTTP/1.1\r\nHost: ${url.host}\r\n\r\n');
@@ -468,11 +473,40 @@ void main() {
       final oldCount = paths.length;
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(paths.length, oldCount);
-      expect(oldCount, lessThan(18));
+      expect(requests.every((r) => r.$2 < 2 * 1024 * 1024), isTrue);
       final next = await fetch(url.toString(), range: 'bytes=900000-900999');
       expect(next.$2, source.sublist(900000, 901000));
     },
   );
+  test('a newer request for a track replaces the older one', () async {
+    final url = Uri.parse(register(['/seek']));
+    final older = await Socket.connect(url.host, url.port);
+    older.write('GET ${url.path} HTTP/1.1\r\nHost: ${url.host}\r\n\r\n');
+    await older.flush();
+    var received = 0;
+    final started = Completer<void>();
+    final ended = Completer<void>();
+    older.listen(
+      (data) {
+        received += data.length;
+        if (!started.isCompleted) started.complete();
+      },
+      onError: (Object _) {
+        if (!ended.isCompleted) ended.complete();
+      },
+      onDone: () {
+        if (!ended.isCompleted) ended.complete();
+      },
+    );
+    await started.future;
+    // Like mpv's seek: the new range is requested while the old connection
+    // is still open.
+    final next = await fetch(url.toString(), range: 'bytes=900000-900999');
+    expect(next.$2, source.sublist(900000, 901000));
+    await ended.future.timeout(const Duration(seconds: 1));
+    expect(received, lessThan(source.length));
+    older.destroy();
+  });
   test(
     'eight-thread saturation still leaves a connection for rescue',
     () async {
