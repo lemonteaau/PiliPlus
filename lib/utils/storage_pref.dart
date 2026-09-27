@@ -296,12 +296,13 @@ abstract final class Pref {
       defaultValue: <String>[],
     ),
   );
+  static const threadRipperConcurrencyValues = [4, 8, 16, 32, 64, 128];
   static int get threadRipperConcurrency {
     final value = _setting.get(
       SettingBoxKey.threadRipperConcurrency,
       defaultValue: 8,
     );
-    return const [4, 8, 16, 32, 64, 128].contains(value) ? value as int : 8;
+    return threadRipperConcurrencyValues.contains(value) ? value as int : 8;
   }
 
   static String get banWordForRecommend =>

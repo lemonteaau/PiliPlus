@@ -77,13 +77,31 @@ List<SettingsModel> get videoSettings => [
     setKey: SettingBoxKey.threadRipperOverseas,
     defaultVal: false,
   ),
-  getVideoFilterSelectModel(
+  NormalModel(
     title: '线程撕裂者：并发数',
-    subtitle: '音视频共享连接上限；下次加载生效',
-    key: SettingBoxKey.threadRipperConcurrency,
-    values: [4, 8, 16, 32, 64, 128],
-    defaultValue: 8,
-    isFilter: false,
+    leading: const Icon(Icons.call_split),
+    getSubtitle: () => Pref.threadRipperAutoConcurrency
+        ? '当前 ${Pref.threadRipperConcurrency}，自动并发数开启时不生效'
+        : '当前 ${Pref.threadRipperConcurrency}，音视频共享连接上限；下次加载生效',
+    onTap: (context, setState) async {
+      final result = await showDialog<int>(
+        context: context,
+        builder: (context) => SelectDialog<int>(
+          title: '线程撕裂者：并发数',
+          value: Pref.threadRipperConcurrency,
+          values: Pref.threadRipperConcurrencyValues
+              .map((e) => (e, '$e'))
+              .toList(),
+        ),
+      );
+      if (result != null) {
+        await GStorage.setting.put(
+          SettingBoxKey.threadRipperConcurrency,
+          result,
+        );
+        if (context.mounted) setState();
+      }
+    },
   ),
   const SwitchModel(
     title: '线程撕裂者：自动并发数',
