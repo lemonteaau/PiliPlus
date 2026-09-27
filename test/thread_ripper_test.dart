@@ -547,6 +547,15 @@ void main() {
     expect(paths.length, lessThanOrEqualTo(10));
   });
 
+  test('audio is not fetched as 64 KiB round trips', () async {
+    source = Uint8List(2 * 1024 * 1024);
+    final result = await fetch(
+      proxy.registerCandidates([endpoint('/good')], isAudio: true),
+    );
+    expect(result.$2, source);
+    expect(paths.length, lessThanOrEqualTo(10));
+  });
+
   test(
     'interrupted verified pieces resume without dropping or repeating bytes',
     () async {

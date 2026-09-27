@@ -574,8 +574,10 @@ class RipperRangeProxy {
             1,
             min(_normalLimit, (concurrency / 8).ceil()),
           );
+          // Keep two audio pieces in flight so that one request's round trip
+          // overlaps the other's transfer; video keeps its share.
           return track.isAudio
-              ? audioBudget
+              ? max(2, audioBudget)
               : max(1, _normalLimit - audioBudget);
         }
 
@@ -599,9 +601,18 @@ class RipperRangeProxy {
                       .toList()
                 : preferred;
             if (proven.isEmpty) proven.add(head.url);
+            // One 64 KiB audio piece per round trip capped audio near
+            // 1 Mbit/s on high-latency routes. Pieces of at least 256 KiB,
+            // larger on fast connections (up to 1 MiB), amortize it.
             final window = min(
               end - cursor + 1,
-              track.isAudio ? budget * 64 * 1024 : 2 * 1024 * 1024 - 64 * 1024,
+              track.isAudio
+                  ? budget *
+                        max<int>(
+                          256 * 1024,
+                          _minChunk(end - cursor + 1, budget, preferred.length),
+                        )
+                  : 2 * 1024 * 1024 - 64 * 1024,
             );
             final floor = _minChunk(window, budget, preferred.length);
             final count = min(budget, max(1, (window / floor).ceil()));
