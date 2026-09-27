@@ -1053,6 +1053,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           return;
         }
         if (event.startsWith("Failed to open https://") ||
+            // thread-ripper serves DASH through its loopback proxy
+            event.startsWith("Failed to open http://127.0.0.1:") ||
             event.startsWith("Can not open external file https://") ||
             //tcp: ffurl_read returned 0xdfb9b0bb
             //tcp: ffurl_read returned 0xffffff99
