@@ -72,10 +72,10 @@ List<SettingsModel> get videoSettings => [
   ),
   const SwitchModel(
     title: '线程撕裂者：海外节点',
-    subtitle: '开启优先海外节点，关闭优先大陆节点；自定义节点为空时生效',
+    subtitle: '默认关闭，优先大陆节点（上游推荐）；连大陆线路很差时再开启。自定义节点为空时生效',
     leading: Icon(Icons.public),
     setKey: SettingBoxKey.threadRipperOverseas,
-    defaultVal: true,
+    defaultVal: false,
   ),
   getVideoFilterSelectModel(
     title: '线程撕裂者：并发数',
@@ -90,7 +90,7 @@ List<SettingsModel> get videoSettings => [
     subtitle: '根据卡顿和缓冲在 8–32 线程间调整；关闭时使用手动并发数，下次加载生效',
     leading: Icon(Icons.auto_graph),
     setKey: SettingBoxKey.threadRipperAutoConcurrency,
-    defaultVal: false,
+    defaultVal: true,
   ),
   NormalModel(
     title: '线程撕裂者：自定义节点',
