@@ -1000,6 +1000,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         _ripperProxy?.autoConcurrency?.buffer(
           (player.state.buffer - position).inMilliseconds / 1000,
           player.state.playing && !_ripperRestarting,
+          cacheFull: () => player.getProperty('demuxer-cache-idle') == 'yes',
         );
         final posInSeconds = position.inSeconds;
 

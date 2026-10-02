@@ -1,4 +1,4 @@
-// Bilibili-thread-ripper 0.9.4.2 createAutoConcurrency, MIT.
+// Bilibili-thread-ripper 2026.9.29.2 createAutoConcurrency, MIT.
 import 'dart:math';
 
 /// One controller per player; learned limits survive a change of video.
@@ -20,6 +20,8 @@ class RipperAutoConcurrency {
   final _spans = <({int from, int to})>[];
   final _ahead = <({int at, double seconds})>[];
   _Trial? _trial;
+  // A start above the player's own level, which it returns to once ahead.
+  ({int base, int until})? _startup;
   int get threads => ladder[_level];
 
   double _throughput(int at) {
@@ -60,7 +62,19 @@ class RipperAutoConcurrency {
     }
     if (next >= ladder.length) return false;
     _setLevel(next, _Trial(_level, next, at, _throughput(at)));
+    _startup = null;
     return true;
+  }
+
+  // Up to 16 threads, never onto or past a level the server refused.
+  int _startupLevel(int at) {
+    _rests.removeWhere((_, rest) => rest.until <= at);
+    if (_rests[_level]?.hard == true) return _level;
+    var level = _level;
+    while (level < 2 && _rests[level + 1]?.hard != true) {
+      level++;
+    }
+    return level;
   }
 
   void delivered(int bytes) {
@@ -99,10 +113,20 @@ class RipperAutoConcurrency {
     return _stepUp(true);
   }
 
-  bool buffer(double ahead, bool playing) {
+  /// [cacheFull]: mpv's cache holds all it may, a limit that can sit below 15 s.
+  bool buffer(double ahead, bool playing, {bool Function()? cacheFull}) {
     final at = _now();
     _ahead.add((at: at, seconds: ahead));
     _ahead.removeWhere((s) => at - s.at > 1250);
+    final start = _startup;
+    if (start != null && at >= start.until) {
+      _startup = null;
+    } else if (start != null &&
+        at - _changedAt >= 2500 &&
+        (ahead >= 15 || (cacheFull?.call() ?? false))) {
+      if (_level > start.base) _setLevel(_level - 1, null);
+      if (_level <= start.base) _startup = null;
+    }
     final earlier = _ahead.where((s) => at - s.at >= 1000).firstOrNull;
     final pressed =
         playing &&
@@ -131,12 +155,17 @@ class RipperAutoConcurrency {
   }
 
   void newSession() {
+    final at = _now();
     _ahead.clear();
     _pressureSince = 0;
     _trial = null;
     _buckets.clear();
     _spans.clear();
-    if (_saturated) _saturatedSince = _now();
+    if (_saturated) _saturatedSince = at;
+    final base = _startup?.base ?? _level;
+    final target = _startupLevel(at);
+    if (target > _level) _setLevel(target, null);
+    _startup = _level > base ? (base: base, until: at + 30000) : null;
   }
 }
 
