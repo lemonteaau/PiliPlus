@@ -59,32 +59,73 @@ for (const speeds of [[0,0,0,0], [1200000,600000,10000,0], [900000,300000,0,0], 
 }
 fs.writeFileSync('test/fixtures/ripper_assignments.json', JSON.stringify(weighted,null,2)+'\n');
 
-let clock = 5000;
-const auto = globalThis.__BILI_IDM_DOWNLOADER_FACTORY__.createAutoConcurrency({now:()=>clock});
-const autoSteps = [];
-function act(op, args=[], advance=0) {
-  clock += advance;
-  auto[op](...args);
-  autoSteps.push({at:clock,op,args,threads:auto.threads()});
-}
-function flow(bps, duration) {
-  act('demand',[auto.threads(), auto.threads(), 12]);
-  for (let i=0;i<duration;i+=250) {
-    act('activity',[],250);
-    act('delivered',[bps/4]);
+const autoScenarios = [];
+function scenario(name, run) {
+  let clock = 5000;
+  const auto = globalThis.__BILI_IDM_DOWNLOADER_FACTORY__.createAutoConcurrency({now:()=>clock});
+  const steps = [];
+  function act(op, args=[], advance=0) {
+    clock += advance;
+    auto[op](...args);
+    steps.push({at:clock,op,args,threads:auto.threads()});
   }
+  run(act, auto);
+  autoScenarios.push({name,steps});
 }
-flow(1000000,5000);
-act('stall');
-flow(950000,11000); // Fruitless trial returns to eight and rests twelve.
-act('stall',[],3000); // A stall can skip the resting level.
-flow(1500000,11000);
-act('pushback',[429]);
-act('stall',[],3000); // A refusal cannot be skipped.
-act('stall',[],180001);
-act('newSession');
-for (let i=0;i<12;i++) {
-  act('activity',[],250);
-  act('buffer',[4-i*.1,true]);
-}
-fs.writeFileSync('test/fixtures/ripper_auto.json',JSON.stringify(autoSteps,null,2)+'\n');
+scenario('trials, pressure and rate limits', (act, auto) => {
+  function flow(bps, duration) {
+    act('demand',[auto.threads(), auto.threads(), 12]);
+    for (let i=0;i<duration;i+=250) {
+      act('activity',[],250);
+      act('delivered',[bps/4]);
+    }
+  }
+  flow(1000000,5000);
+  act('stall');
+  flow(950000,11000); // Fruitless trial returns to eight and rests twelve.
+  act('stall',[],3000); // A stall can skip the resting level.
+  flow(1500000,11000);
+  act('pushback',[429]);
+  act('stall',[],3000); // A refusal cannot be skipped.
+  act('stall',[],180001);
+  act('newSession');
+  for (let i=0;i<12;i++) {
+    act('activity',[],250);
+    act('buffer',[4-i*.1,true]);
+  }
+});
+scenario('a start runs at 16 threads and steps back once ahead', (act) => {
+  act('newSession');
+  for (let i=0;i<4;i++) act('buffer',[3+i,true],500);
+  act('buffer',[16,true],400); // Still within the cooldown of the start.
+  act('buffer',[16,true],200);
+  act('buffer',[16,true],1000);
+  act('buffer',[14,true],1600); // Not ahead enough.
+  act('buffer',[15,true],100);
+  act('buffer',[20,true],2500); // Already back at its base.
+  act('newSession');
+});
+scenario('a stall during the start climbs and ends it', (act) => {
+  act('newSession');
+  act('stall',[],2600);
+  act('buffer',[20,true],2600);
+  act('buffer',[20,true],2600);
+});
+scenario('a start that never catches up keeps its threads', (act) => {
+  act('newSession');
+  for (let i=0;i<31;i++) act('buffer',[5,true],1000);
+  act('buffer',[20,true],1000);
+  act('newSession');
+});
+scenario('refusals cap the start and a restart keeps its base', (act) => {
+  act('pushback',[429]);
+  act('newSession'); // Eight itself was refused.
+  act('newSession',[],180001);
+  act('pushback',[429],2600);
+  act('buffer',[20,true],2600);
+  act('newSession'); // Sixteen is refused for a while; twelve is not.
+  act('newSession',[],1000);
+  act('buffer',[20,true],2000);
+  act('buffer',[20,true],600);
+});
+fs.writeFileSync('test/fixtures/ripper_auto.json',JSON.stringify(autoScenarios,null,2)+'\n');

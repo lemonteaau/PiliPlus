@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:PiliPlus/services/thread_ripper/auto_concurrency.dart';
 import 'package:PiliPlus/services/thread_ripper/cdn_resolver.dart';
 import 'package:PiliPlus/services/thread_ripper/range_proxy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -523,6 +524,22 @@ void main() {
     expect(received, lessThan(source.length));
     older.destroy();
   });
+  test('a track asked again for bytes starts a new session', () async {
+    proxy.close();
+    final auto = _CountingAuto();
+    proxy = RipperRangeProxy(autoConcurrency: auto, userAgent: 'test');
+    await proxy.start();
+    expect((auto.sessions, auto.threads), (1, 16));
+    final video = register(['/good']);
+    final audio = register(['/good']);
+    await fetch(video, range: 'bytes=0-1023');
+    await fetch(audio, range: 'bytes=0-1023');
+    await fetch(audio, method: 'HEAD');
+    expect(auto.sessions, 1);
+    final seek = await fetch(video, range: 'bytes=500000-500999');
+    expect(seek.$2, source.sublist(500000, 501000));
+    expect(auto.sessions, 2);
+  });
   test(
     'eight-thread saturation still leaves a connection for rescue',
     () async {
@@ -608,4 +625,14 @@ void main() {
       isTrue,
     );
   });
+}
+
+class _CountingAuto extends RipperAutoConcurrency {
+  int sessions = 0;
+
+  @override
+  void newSession() {
+    sessions++;
+    super.newSession();
+  }
 }

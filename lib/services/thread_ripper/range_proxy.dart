@@ -519,6 +519,10 @@ class RipperRangeProxy {
       // reopen) arrives before it closes the old one; stop the old one now.
       track.request?.cancel();
       track.request = job;
+      // mpv only asks again for bytes its cache lacks, i.e. upstream's seek
+      // outside the buffer.
+      if (track.opened) autoConcurrency?.newSession();
+      track.opened = true;
     }
     socket.listen(
       null,
@@ -754,6 +758,7 @@ class _Track {
   final RipperCdnResolver resolver;
   int? total;
   _Job? request;
+  bool opened = false;
 }
 
 class _Piece {

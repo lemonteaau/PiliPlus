@@ -65,7 +65,7 @@ List<SettingsModel> get videoSettings => [
   ),
   const SwitchModel(
     title: '线程撕裂者',
-    subtitle: '0.9.4.2 下载核心，并发下载音视频；下次加载视频生效',
+    subtitle: '2026.9.29.2 下载核心，并发下载音视频；下次加载视频生效',
     leading: Icon(Icons.speed),
     setKey: SettingBoxKey.threadRipperEnabled,
     defaultVal: true,
@@ -105,7 +105,7 @@ List<SettingsModel> get videoSettings => [
   ),
   const SwitchModel(
     title: '线程撕裂者：自动并发数',
-    subtitle: '根据卡顿和缓冲在 8–32 线程间调整；关闭时使用手动并发数，下次加载生效',
+    subtitle: '开播先用 16 线程，再根据卡顿和缓冲在 8–32 线程间调整；关闭时使用手动并发数，下次加载生效',
     leading: Icon(Icons.auto_graph),
     setKey: SettingBoxKey.threadRipperAutoConcurrency,
     defaultVal: true,
