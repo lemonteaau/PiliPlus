@@ -17,6 +17,11 @@
 
 - Android：一般手机选 `app-arm64-v8a-release.apk`
 - iOS：`PiliPlus-custom-ios-unsigned.ipa`，未签名，需要自己签名安装
+- Windows：安装版 `PiliPlus-custom-windows-x64-setup.exe`，免安装版 `PiliPlus-custom-windows-x64-portable.zip`
+- macOS：`PiliPlus-custom-macos.dmg`，未签名，第一次打开要在「系统设置 → 隐私与安全性」里允许
+- Linux：`PiliPlus-custom-linux-amd64` 开头的 `.deb`、`.rpm`、`.AppImage` 或 `.tar.gz`
+
+桌面版和上游使用同一个应用身份，会覆盖已经安装的上游桌面版，并沿用它的登录和设置。某个桌面平台构建失败时，那次发布会缺少它的安装包，Android 和 iOS 照常发布。
 
 上游每次更新后会自动合并并重新构建，版本号形如 `2.1.5-fork.1182`。
 
