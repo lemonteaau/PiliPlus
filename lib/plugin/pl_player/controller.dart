@@ -69,6 +69,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 typedef PlayCallback = Future<void>? Function();
+typedef PlayOwner = ({String tag, Type type});
 
 class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   Player? _videoPlayerController;
@@ -217,7 +218,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         case .portrait:
           if (lastSize.width > size.height) {
             height = min(lastSize.width, _lastWindowBounds.size.height);
-            width = height / aspectRatio;
+            width = height * aspectRatio;
           } else {
             height = size.height;
             width = size.width;
@@ -239,7 +240,12 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         height,
       );
     }
-    return lastRect;
+    return _lastPipBounds = Rect.fromLTWH(
+      lastRect.left,
+      lastRect.top,
+      lastSize.width,
+      lastSize.width / aspectRatio,
+    );
   }
 
   bool updatePipBounds() {
@@ -291,13 +297,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     int height = state.height;
     if (width == 0) width = this.width ?? 16;
     if (height == 0) height = this.height ?? 9;
-    final double aspectRatio;
+    final aspectRatio = width / height;
     if (height > width) {
-      aspectRatio = height / width;
-      size = Size(shortSide, shortSide * aspectRatio);
-      minimumSize = Size(minShortSide, minShortSide * aspectRatio);
+      size = Size(shortSide, shortSide / aspectRatio);
+      minimumSize = Size(minShortSide, minShortSide / aspectRatio);
     } else {
-      aspectRatio = width / height;
       size = Size(shortSide * aspectRatio, shortSide);
       minimumSize = Size(minShortSide * aspectRatio, minShortSide);
     }
@@ -490,10 +494,16 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     return _instance != null;
   }
 
-  static void setPlayCallBack(PlayCallback? playCallBack) {
+  static void setPlayCallBack(
+    PlayCallback? playCallBack, {
+    PlayOwner? playOwner,
+  }) {
     _playCallBack = playCallBack;
+    _playOwner = playOwner;
   }
 
+  static PlayOwner? _playOwner;
+  static PlayOwner? get playOwner => _playOwner;
   static PlayCallback? _playCallBack;
 
   static Future<void>? playIfExists() {
