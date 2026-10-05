@@ -3,7 +3,12 @@ import 'dart:io' show Platform;
 
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:flutter/services.dart'
-    show SystemChrome, MethodChannel, SystemUiOverlay, DeviceOrientation;
+    show
+        SystemChrome,
+        MethodChannel,
+        SystemUiOverlay,
+        SystemUiMode,
+        DeviceOrientation;
 
 bool _isDesktopFullScreen = false;
 
@@ -32,12 +37,20 @@ Future<void> exitDesktopFullScreen() async {
 }
 
 List<DeviceOrientation>? _lastOrientation;
-Future<void>? _setPreferredOrientations(List<DeviceOrientation> orientations) {
-  if (_lastOrientation == orientations) {
+List<DeviceOrientation>? _requestedOrientation;
+Future<void>? _setPreferredOrientations(
+  List<DeviceOrientation> orientations, {
+  bool force = false,
+}) {
+  // Remember intent before awaiting the platform, including during rotation.
+  _requestedOrientation = orientations;
+  if (!force && _lastOrientation == orientations) {
     return null;
   }
   return SystemChrome.setPreferredOrientations(orientations).then((_) {
-    _lastOrientation = orientations;
+    if (_requestedOrientation == orientations) {
+      _lastOrientation = orientations;
+    }
   });
 }
 
@@ -65,6 +78,33 @@ Future<void>? fullMode() {
 
 bool _showSystemBar = true;
 bool get showSystemBar_ => _showSystemBar;
+
+// Focus returns after the notification shade or another app's floating window.
+// Reapply the current page's intent, rather than the startup portrait default.
+Future<void> restoreAndroidSystemChrome({required bool horizontalScreen}) async {
+  await _setPreferredOrientations(
+    _requestedOrientation ??
+        (horizontalScreen
+            ? const [
+                DeviceOrientation.portraitUp,
+                DeviceOrientation.portraitDown,
+                DeviceOrientation.landscapeLeft,
+                DeviceOrientation.landscapeRight,
+              ]
+            : const [DeviceOrientation.portraitUp]),
+    force: true,
+  );
+  await SystemChrome.setEnabledSystemUIMode(
+    _showSystemBar ? _shownSystemUiMode : SystemUiMode.immersiveSticky,
+    overlays: SystemUiOverlay.values,
+  );
+}
+
+SystemUiMode get _shownSystemUiMode =>
+    Platform.isAndroid && DeviceUtils.sdkInt < 29
+    ? SystemUiMode.manual
+    : SystemUiMode.edgeToEdge;
+
 Future<void>? hideSystemBar() {
   if (!_showSystemBar) {
     return null;
@@ -80,7 +120,7 @@ Future<void>? showSystemBar() {
   }
   _showSystemBar = true;
   return SystemChrome.setEnabledSystemUIMode(
-    Platform.isAndroid && DeviceUtils.sdkInt < 29 ? .manual : .edgeToEdge,
+    _shownSystemUiMode,
     overlays: SystemUiOverlay.values,
   );
 }

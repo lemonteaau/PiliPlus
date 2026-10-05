@@ -227,12 +227,7 @@ void _applyAndroidActivitySettings() {
 
 Future<void> _applyAndroidActivitySettingsAsync() async {
   try {
-    final orientationFuture = Pref.horizontalScreen
-        ? fullMode()
-        : portraitUpMode();
-    if (orientationFuture != null) await orientationFuture;
-
-    await SystemChrome.setEnabledSystemUIMode(.edgeToEdge);
+    await restoreAndroidSystemChrome(horizontalScreen: Pref.horizontalScreen);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         systemNavigationBarColor: Colors.transparent,
