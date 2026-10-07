@@ -2282,5 +2282,58 @@
         "threads": 8
       }
     ]
+  },
+  {
+    "name": "stalls climb the ladder to 64 and stop there",
+    "steps": [
+      {
+        "at": 8000,
+        "op": "stall",
+        "args": [],
+        "threads": 12
+      },
+      {
+        "at": 11000,
+        "op": "stall",
+        "args": [],
+        "threads": 16
+      },
+      {
+        "at": 14000,
+        "op": "stall",
+        "args": [],
+        "threads": 24
+      },
+      {
+        "at": 17000,
+        "op": "stall",
+        "args": [],
+        "threads": 32
+      },
+      {
+        "at": 20000,
+        "op": "stall",
+        "args": [],
+        "threads": 48
+      },
+      {
+        "at": 23000,
+        "op": "stall",
+        "args": [],
+        "threads": 64
+      },
+      {
+        "at": 26000,
+        "op": "stall",
+        "args": [],
+        "threads": 64
+      },
+      {
+        "at": 29000,
+        "op": "stall",
+        "args": [],
+        "threads": 64
+      }
+    ]
   }
 ]

@@ -1,4 +1,4 @@
-// Bilibili-thread-ripper 2026.9.29.2 createAutoConcurrency, MIT.
+// Bilibili-thread-ripper 2026.10.7.1 createAutoConcurrency, MIT.
 import 'dart:math';
 
 /// One controller per player; learned limits survive a change of video.
@@ -7,7 +7,7 @@ class RipperAutoConcurrency {
     : _now = now ?? (() => _clock.elapsedMilliseconds);
   static final _clock = Stopwatch()..start();
   final int Function() _now;
-  static const ladder = [8, 12, 16, 24, 32];
+  static const ladder = [8, 12, 16, 24, 32, 48, 64];
   void Function()? onChanged;
   int _level = 0;
   int _changedAt = 0;

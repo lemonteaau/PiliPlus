@@ -128,4 +128,7 @@ scenario('refusals cap the start and a restart keeps its base', (act) => {
   act('buffer',[20,true],2000);
   act('buffer',[20,true],600);
 });
+scenario('stalls climb the ladder to 64 and stop there', (act) => {
+  for (let i=0;i<8;i++) act('stall',[],3000);
+});
 fs.writeFileSync('test/fixtures/ripper_auto.json',JSON.stringify(autoScenarios,null,2)+'\n');
