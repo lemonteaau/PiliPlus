@@ -552,6 +552,19 @@ jobs:
 
           gh api "repos/bggRGjQaUbCoE/PiliPlus/releases/tags/$UPSTREAM_RELEASE_TAG" --jq '.body // ""' > "$RUNNER_TEMP/upstream-release-notes.md"
           {
+            # The in-app update dialog shows this body as plain text, so the notice
+            # comes first. Installs signed with the key retired after 2.1.6-fork.1248
+            # cannot update in place and can only learn that from here.
+            cat <<'NOTICE'
+          【Android 签名变更】2.1.6-fork.1248 之后的版本换了新签名。装着 2.1.6-fork.1248 或更早版本的设备不能直接覆盖更新，安装时会提示「应用未安装」或「与现有软件包冲突」，需要先卸载旧版再装新版。卸载会清空 App 数据，请先迁移：
+
+          1. 在旧版打开 设置 → 关于，点「导入/导出登录信息」→「导出文件至本地」，再点「导入/导出设置」→「导出文件至本地」，把两个 json 存到「下载」等手机目录。
+          2. 卸载旧版，安装新版。
+          3. 在新版打开 设置 → 关于，用同样两项的「从本地文件导入」导回登录信息和设置。
+
+          登录信息文件里有账号凭据，导入后请删掉，别发给别人。换签名之后装的版本以后照常更新，不受影响。
+
+          NOTICE
             echo "Personal PiliPlus fork build $RELEASE_VERSION, based on upstream release $UPSTREAM_RELEASE_TAG."
             echo
             echo "Upstream: https://github.com/bggRGjQaUbCoE/PiliPlus/commit/$UPSTREAM_COMMIT"
