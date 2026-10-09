@@ -7,7 +7,7 @@
 ## 与原版的区别
 
 - **看视频更快**：视频会拆成多块，从多个服务器同时下载。在海外看冷门视频或高画质视频时，加载更快、卡顿更少。这个功能移植自 [Bilibili-thread-ripper](https://github.com/MrTangLuyao/Bilibili-thread-ripper)，原理见 [docs/thread-ripper.md](docs/thread-ripper.md)。
-- 默认已经开启，不用设置。相关选项在「设置 → 音视频设置」里，名字都以「线程撕裂者」开头：人在海外可以打开「线程撕裂者：海外节点」。
+- 默认已经开启，不用设置。相关选项在「设置 → 音视频设置」里，名字都以「线程撕裂者」开头：默认使用海外节点，人在大陆可以关闭「线程撕裂者：海外节点」。
 
 其余功能和原版 PiliPlus 一样，功能介绍和常见问题请看[原项目](https://github.com/bggRGjQaUbCoE/PiliPlus)。
 

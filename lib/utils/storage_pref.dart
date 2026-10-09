@@ -288,9 +288,10 @@ abstract final class Pref {
     SettingBoxKey.threadRipperEpisodeEnabled,
     defaultValue: true,
   );
-  // Upstream userscript defaults: mainland nodes, automatic thread count.
+  // Overseas nodes by default (most fork users are abroad; upstream defaults
+  // to mainland); automatic thread count as upstream.
   static bool get threadRipperOverseas =>
-      _setting.get(SettingBoxKey.threadRipperOverseas, defaultValue: false);
+      _setting.get(SettingBoxKey.threadRipperOverseas, defaultValue: true);
   static bool get threadRipperAutoConcurrency => _setting.get(
     SettingBoxKey.threadRipperAutoConcurrency,
     defaultValue: true,
