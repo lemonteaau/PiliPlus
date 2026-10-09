@@ -122,13 +122,21 @@ jobs:
         shell: pwsh
         run: lib/scripts/build.ps1 android
 
-      - name: Verify committed signing key
+      - name: Restore signing key from secrets
         shell: bash
+        env:
+          SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ ! -f android/app/key.jks ] || [ ! -f android/key.properties ]; then
-            echo "::error::android/app/key.jks or android/key.properties is missing. Building without the committed keystore produces a random signature and every update conflicts with the installed app."
+          if [ -z "$SIGN_KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Signing secrets are missing. Building without them produces a random signature and every update conflicts with the installed app."
             exit 1
           fi
+          printf '%s' "$SIGN_KEYSTORE_BASE64" | base64 --decode > android/app/key.jks
+          printf 'storeFile=key.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
 
       - name: Build release APKs
         shell: bash
