@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    # Docs-only pushes need no new build; the sync job also skips them on schedule.
+    paths-ignore:
+      - "**.md"
   schedule:
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
@@ -69,7 +72,14 @@ jobs:
 
           latest_release="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '[.[] | select(.draft == false and .prerelease == false)][0] // {} | [.tag_name // "", .target_commitish // ""] | @tsv')"
           read -r existing_tag existing_commit <<< "$latest_release"
-          if [[ "$existing_commit" == "$after" && "$existing_tag" == "v${upstream_version}-fork."* ]]; then
+          # Skip when nothing but Markdown changed since the latest release of this upstream version.
+          changed=""
+          if [ -n "$existing_commit" ] && git cat-file -e "${existing_commit}^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$existing_commit" "$after" | grep -v '\.md$' || true)"
+          else
+            changed="unknown"
+          fi
+          if [[ -z "$changed" && "$existing_tag" == "v${upstream_version}-fork."* ]]; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=true" >> "$GITHUB_OUTPUT"
