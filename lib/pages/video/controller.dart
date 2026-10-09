@@ -724,6 +724,12 @@ class VideoDetailController extends GetxController
     return null;
   }
 
+  // 剧集加速 (thread-ripper 2026.10.8.1): episodes go through the proxy unless
+  // switched off; DRM and preview-only episodes never do.
+  bool get _ripperEpisodeAllowed =>
+      videoType != VideoType.pgc ||
+      (Pref.threadRipperEpisodeEnabled && !data.isDrm && !data.isPreview);
+
   Future<void> playerInit({
     bool? autoplay,
     bool autoFullScreenFlag = false,
@@ -744,6 +750,7 @@ class VideoDetailController extends GetxController
               audioSource: audioUrl,
               videoCandidates:
                   data.dash != null &&
+                      _ripperEpisodeAllowed &&
                       videoUrl == VideoUtils.getCdnUrl(firstVideo.playUrls)
                   ? firstVideo.playUrls.toList()
                   : null,

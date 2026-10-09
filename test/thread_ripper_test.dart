@@ -4,12 +4,22 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:PiliPlus/models/video/play/url.dart';
 import 'package:PiliPlus/services/thread_ripper/auto_concurrency.dart';
 import 'package:PiliPlus/services/thread_ripper/cdn_resolver.dart';
 import 'package:PiliPlus/services/thread_ripper/range_proxy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('episode playurl flags that keep thread-ripper off', () {
+    final plain = PlayUrlModel.fromJson({});
+    expect((plain.isDrm, plain.isPreview), (false, false));
+    final drm = PlayUrlModel.fromJson({'is_drm': true, 'is_preview': 0});
+    expect((drm.isDrm, drm.isPreview), (true, false));
+    final preview = PlayUrlModel.fromJson({'is_drm': false, 'is_preview': 1});
+    expect((preview.isDrm, preview.isPreview), (false, true));
+  });
+
   test('CDN synthesis preserves signed path/query and resets peer ports', () {
     final urls = RipperCdnResolver.candidates([
       'https://peer.szbdyd.com:4483/upgcxcode/video.m4s?sign=a%2Bb&x=1',

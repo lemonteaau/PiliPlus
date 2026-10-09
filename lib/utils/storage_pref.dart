@@ -283,6 +283,11 @@ abstract final class Pref {
 
   static bool get threadRipperEnabled =>
       _setting.get(SettingBoxKey.threadRipperEnabled, defaultValue: true);
+  // 剧集加速 (upstream 2026.10.8.1): on unless switched off.
+  static bool get threadRipperEpisodeEnabled => _setting.get(
+    SettingBoxKey.threadRipperEpisodeEnabled,
+    defaultValue: true,
+  );
   // Upstream userscript defaults: mainland nodes, automatic thread count.
   static bool get threadRipperOverseas =>
       _setting.get(SettingBoxKey.threadRipperOverseas, defaultValue: false);
