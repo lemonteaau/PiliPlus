@@ -215,6 +215,11 @@ void main() async {
 
 final _androidActivityObserver = _AndroidActivityObserver();
 
+// Applied once per Activity. `resumed` also fires whenever the window regains
+// focus, so re-applying on every resume would undo the orientation and system
+// bars the player set for fullscreen.
+bool _androidActivitySettingsPending = true;
+
 void _observeAndroidActivity() {
   WidgetsBinding.instance.addObserver(_androidActivityObserver);
   if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
@@ -223,6 +228,8 @@ void _observeAndroidActivity() {
 }
 
 void _applyAndroidActivitySettings() {
+  if (!_androidActivitySettingsPending) return;
+  _androidActivitySettingsPending = false;
   unawaited(_applyAndroidActivitySettingsAsync());
 }
 
@@ -269,6 +276,9 @@ class _AndroidActivityObserver extends WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _applyAndroidActivitySettings();
+    } else if (state == AppLifecycleState.detached) {
+      // The Activity is gone; a new one needs the settings again.
+      _androidActivitySettingsPending = true;
     }
   }
 }
