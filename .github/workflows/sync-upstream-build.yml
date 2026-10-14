@@ -58,7 +58,10 @@ jobs:
           after="$(git rev-parse HEAD)"
           upstream_commit="$(git rev-parse upstream/main)"
 
-          release_version="${upstream_version}-fork.${GITHUB_RUN_NUMBER}"
+          # The fork build number is the commit count, the same number the app
+          # shows after "+" (lib/scripts/build.ps1 versionCode).
+          version_code="$(git rev-list --count "$after")"
+          release_version="${upstream_version}-fork.${version_code}"
           release_tag="v${release_version}"
 
           echo "commit_sha=$after" >> "$GITHUB_OUTPUT"
@@ -97,10 +100,10 @@ jobs:
     if: needs.sync.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout updated fork main
+      - name: Checkout the commit being released
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
       - name: Setup Java
@@ -161,10 +164,10 @@ jobs:
     if: needs.sync.outputs.should_build == 'true'
     runs-on: macos-26
     steps:
-      - name: Checkout updated fork main
+      - name: Checkout the commit being released
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
       - name: Setup Flutter
@@ -203,10 +206,10 @@ jobs:
     if: needs.sync.outputs.should_build == 'true'
     runs-on: windows-latest
     steps:
-      - name: Checkout updated fork main
+      - name: Checkout the commit being released
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
       - name: Setup Flutter
@@ -259,10 +262,10 @@ jobs:
     if: needs.sync.outputs.should_build == 'true'
     runs-on: macos-26
     steps:
-      - name: Checkout updated fork main
+      - name: Checkout the commit being released
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
       - name: Setup Flutter
@@ -305,10 +308,10 @@ jobs:
     if: needs.sync.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout updated fork main
+      - name: Checkout the commit being released
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
       - name: Install dependencies
