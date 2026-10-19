@@ -61,16 +61,6 @@ class PlayUrlModel {
   bool isDrm = false;
   bool isPreview = false;
 
-  int findAvailableVideoQuality(int preferredQuality) {
-    final curHighestVideoQa = dash!.video!.first.quality.code;
-    if (acceptQuality case final qualitys?
-        when preferredQuality <= curHighestVideoQa) {
-      return qualitys.findClosestTarget((e) => e <= preferredQuality, max);
-    } else {
-      return curHighestVideoQa;
-    }
-  }
-
   @pragma('vm:notify-debugger-on-exception')
   int get missingVideoQualityBelowHighest {
     int best = -1;
