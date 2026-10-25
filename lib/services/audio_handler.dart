@@ -24,6 +24,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:get/get_core/src/get_main.dart';
 import 'package:get/get_instance/src/extension_instance.dart';
+import 'package:jni/jni.dart' show JStringExtension;
 import 'package:path/path.dart' as path;
 
 Future<VideoPlayerServiceHandler> initAudioService() {
@@ -61,6 +62,22 @@ typedef _StatusConfig = (
 );
 
 class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
+  VideoPlayerServiceHandler() {
+    if (Platform.isAndroid) {
+      final jStr = AndroidHelper.manufacturer();
+      if (jStr != null &&
+          jStr.toDartString(releaseOriginal: true).toLowerCase() == 'vivo') {
+        androidPlaybackInfo.add(
+          RemoteAndroidPlaybackInfo(
+            volumeControlType: .fixed,
+            maxVolume: 100,
+            volume: 50,
+          ),
+        );
+      }
+    }
+  }
+
   static final List<MediaItem> _item = [];
   bool enableBackgroundPlay = Pref.enableBackgroundPlay;
 
@@ -90,9 +107,9 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
       final tag = playOwner.tag;
       try {
         return switch (playOwner.type) {
-          UgcIntroController => Get.find<UgcIntroController>(tag: tag),
-          PgcIntroController => Get.find<PgcIntroController>(tag: tag),
-          LocalIntroController => Get.find<LocalIntroController>(tag: tag),
+          UgcIntroController _ => Get.find<UgcIntroController>(tag: tag),
+          PgcIntroController _ => Get.find<PgcIntroController>(tag: tag),
+          LocalIntroController _ => Get.find<LocalIntroController>(tag: tag),
           _ => throw UnimplementedError(playOwner.type.toString()),
         };
       } catch (_) {
