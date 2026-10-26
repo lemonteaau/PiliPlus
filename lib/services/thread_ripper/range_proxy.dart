@@ -287,6 +287,7 @@ class RipperRangeProxy {
           throw const HttpException('Oversized CDN Range body');
         }
         receiving?.chunks.add(chunk);
+        receiving?.onData?.call();
       }
       if (bytes.length != end - start + 1) {
         throw const HttpException('Truncated CDN Range body');
@@ -335,12 +336,14 @@ class RipperRangeProxy {
     bool startup = false,
     bool hurry = false,
     _Resume? resume,
+    _Feed? feed,
   }) async {
     final result = Completer<_Piece>();
     final jobs = <_Job>[];
     final timers = <Timer>[];
     final launched = <int>{};
     final receiving = List.generate(urls.length, (_) => _Receiving());
+    if (feed != null) receiving.forEach(feed.add);
     int failures = 0;
     void launch(int index) {
       if (result.isCompleted || parent.cancelled || !launched.add(index)) {
@@ -414,6 +417,7 @@ class RipperRangeProxy {
     bool metadata = false,
     bool startup = false,
     bool hurry = false,
+    _Feed? feed,
   }) async {
     final clock = Stopwatch()..start();
     final resume = _Resume(end - start + 1);
@@ -476,6 +480,7 @@ class RipperRangeProxy {
             startup: startup,
             hurry: hurry,
             resume: resume,
+            feed: feed,
           );
           job.check();
           autoConcurrency?.delivered(piece.bytes.length);
@@ -615,7 +620,8 @@ class RipperRangeProxy {
         var primaries = <Uri>[];
         var batchIndex = 0;
         var size = 64 * 1024;
-        final pieces = <Future<(_Piece?, Object?, StackTrace?)>>[];
+        var written = headEnd + 1;
+        final pieces = <(_Feed, Future<(_Piece?, Object?, StackTrace?)>)>[];
         void enqueue() {
           if (cursor > end) return;
           if (batchIndex >= primaries.length) {
@@ -654,23 +660,29 @@ class RipperRangeProxy {
           // instead of turning the upstream 64 KiB minimum into a fixed size.
           final last = min(end, cursor + size - 1);
           final primary = primaries[batchIndex++];
-          pieces.add(
-            _download(
-              track,
-              cursor,
-              last,
-              job,
-              preferred: [primary, ...preferred.where((url) => url != primary)],
-              pieceIndex: index,
-              hurry: index <= budget,
-              priority: index <= budget
-                  ? 120 - min(30, index++)
-                  : 55 - min(20, index++ % budget),
-            ).then(
-              (piece) => (piece, null, null),
-              onError: (Object error, StackTrace stack) => (null, error, stack),
-            ),
-          );
+          final feed = _Feed(cursor);
+          final result =
+              _download(
+                track,
+                cursor,
+                last,
+                job,
+                preferred: [
+                  primary,
+                  ...preferred.where((url) => url != primary),
+                ],
+                pieceIndex: index,
+                hurry: index <= budget,
+                priority: index <= budget
+                    ? 120 - min(30, index++)
+                    : 55 - min(20, index++ % budget),
+                feed: feed,
+              ).then<(_Piece?, Object?, StackTrace?)>(
+                (piece) => (piece, null, null),
+                onError: (Object error, StackTrace stack) =>
+                    (null, error, stack),
+              );
+          pieces.add((feed, result.whenComplete(feed.finish)));
           cursor = last + 1;
         }
 
@@ -678,13 +690,33 @@ class RipperRangeProxy {
           enqueue();
         }
         while (pieces.isNotEmpty) {
-          final (piece, error, stack) = await pieces.removeAt(0);
+          final (feed, result) = pieces.first;
+          // Pass on the next piece's bytes as they arrive. Waiting for whole
+          // pieces that share a slow link with the rest in flight starved
+          // playback, audio first: its 64 KiB head lasts about two seconds.
+          while (!feed.done) {
+            if (feed.from(written) case final bytes?) {
+              socket.add(bytes);
+              written += bytes.length;
+              await job.race(socket.flush());
+            } else {
+              await job.race(feed.changed);
+            }
+            job.check();
+          }
+          pieces.removeAt(0);
+          final (piece, error, stack) = await result;
           if (error != null) Error.throwWithStackTrace(error, stack!);
           job.check();
           if (piece!.total != total) {
             throw const HttpException('Resource changed');
           }
-          socket.add(piece.bytes);
+          if (written < feed.start + piece.bytes.length) {
+            socket.add(
+              Uint8List.sublistView(piece.bytes, written - feed.start),
+            );
+            written = feed.start + piece.bytes.length;
+          }
           await job.race(socket.flush());
           job.check();
           budget = pieceBudget();
@@ -785,6 +817,8 @@ class _Resume {
 class _Receiving {
   Uint8List? base;
   final chunks = <List<int>>[];
+  void Function()? onData;
+  int get length => chunks.fold(base?.length ?? 0, (n, c) => n + c.length);
   Uint8List snapshot() {
     final bytes = BytesBuilder(copy: false);
     if (base != null) bytes.add(base!);
@@ -792,6 +826,63 @@ class _Receiving {
       bytes.add(chunk);
     }
     return bytes.takeBytes();
+  }
+
+  /// The received bytes from [offset] within the piece on.
+  Uint8List from(int offset) {
+    final bytes = BytesBuilder(copy: false);
+    var at = 0;
+    for (final part in [?base, ...chunks]) {
+      final next = at + part.length;
+      if (next > offset) {
+        bytes.add(at >= offset ? part : part.sublist(offset - at));
+      }
+      at = next;
+    }
+    return bytes.takeBytes();
+  }
+}
+
+/// A piece still downloading, readable up to its furthest replica. Every
+/// replica holds a verified prefix of the same bytes.
+class _Feed {
+  _Feed(this.start);
+  final int start;
+  final _replicas = <_Receiving>[];
+  Completer<void>? _waiter;
+  bool done = false;
+
+  void add(_Receiving replica) {
+    _replicas.add(replica);
+    replica.onData = _wake;
+  }
+
+  void _wake() {
+    _waiter?.complete();
+    _waiter = null;
+  }
+
+  void finish() {
+    done = true;
+    _wake();
+  }
+
+  /// Completes when a replica receives more or the piece finishes.
+  Future<void> get changed => (_waiter ??= Completer<void>()).future;
+
+  /// Bytes from file offset [position] on, if any have arrived.
+  Uint8List? from(int position) {
+    final offset = position - start;
+    _Receiving? best;
+    var most = offset;
+    for (final replica in _replicas) {
+      final length = replica.length;
+      if (length > most) {
+        most = length;
+        best = replica;
+      }
+    }
+    return best?.from(offset);
   }
 }
 
