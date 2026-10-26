@@ -294,6 +294,22 @@ void main() {
             );
             return;
           }
+          if (request.uri.path == '/trickle' && start >= 65536) {
+            // Half of every piece now, the rest after a pause, like a piece
+            // sharing a slow link with the others in flight.
+            final half = body.length ~/ 2;
+            response.add(body.sublist(0, half));
+            await response.flush();
+            timers.add(
+              Timer(const Duration(seconds: 3), () {
+                try {
+                  response.add(body.sublist(half));
+                  unawaited(response.close().catchError((Object _) {}));
+                } catch (_) {}
+              }),
+            );
+            return;
+          }
           if (request.uri.path == '/resume' &&
               start >= 65536 &&
               body.length > 65536 &&
@@ -401,7 +417,10 @@ void main() {
     final whole = await fetch(url);
     expect(whole.$1.statusCode, 200);
     expect(whole.$2, source);
-    expect((await fetch(url, range: 'bytes=10-99')).$2, source.sublist(10, 100));
+    expect(
+      (await fetch(url, range: 'bytes=10-99')).$2,
+      source.sublist(10, 100),
+    );
   });
 
   test('HEAD, suffix, open-ended seek and 416 responses', () async {
@@ -597,6 +616,24 @@ void main() {
     );
     expect(result.$2, source);
     expect(paths.length, lessThanOrEqualTo(10));
+  });
+
+  test('a piece reaches the player while it is still arriving', () async {
+    final response = await (await client.getUrl(
+      Uri.parse(register(['/trickle'])),
+    )).close();
+    final watch = Stopwatch()..start();
+    final bytes = <int>[];
+    final early = Completer<Duration>();
+    await response.forEach((chunk) {
+      bytes.addAll(chunk);
+      // The head plus part of the first piece, which completes after 3 s.
+      if (bytes.length > 65536 + 100000 && !early.isCompleted) {
+        early.complete(watch.elapsed);
+      }
+    });
+    expect(await early.future, lessThan(const Duration(seconds: 2)));
+    expect(bytes, source);
   });
 
   test(
