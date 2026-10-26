@@ -30,8 +30,31 @@ class RipperRangeProxy {
   final _assignments = RipperAssignments();
   double _connectionBps = 0;
   double _pieceMs = 0;
+  // How long a request on this route waits for its response head.
+  double _headMs = 0;
   int get _hedgeMs =>
       _pieceMs == 0 ? 900 : (_pieceMs * 1.5).round().clamp(250, 900);
+
+  // Upstream hedgeDue without a playback deadline. The fixed delay alone
+  // copied nearly every piece once the link itself was the limit, as each took
+  // longer than 900 ms; the copies took a third of the bandwidth and playback
+  // stalled. A copy now starts for a first copy that is stopped, slower than
+  // this route's connections, or slower than the copy's node; a copy beside
+  // one on pace only takes bandwidth from the pieces behind it.
+  bool _hedgeDue(_Receiving first, int delayMs, double copyBps) {
+    final ran = first.clock?.elapsedMilliseconds;
+    if (ran == null || ran < delayMs) return false;
+    // A node not measured yet is tried, as the chance of a faster one.
+    if (copyBps == 0 || _connectionBps == 0) return true;
+    // No body yet: heads queue behind the other transfers on a busy link.
+    if (first.received == 0) return ran >= _headMs * 1.5;
+    if (ran - first.lastAt >= delayMs) return true;
+    // Judge the pace over a whole delay of transfer, not the wait for it.
+    final moving = ran - first.firstAt;
+    if (moving < delayMs) return false;
+    final rate = first.received * 1000 / moving;
+    return copyBps > rate * 1.5 || rate < _connectionBps * .6;
+  }
 
   void _measure(int bytes, Duration elapsed) {
     if (bytes < 48 * 1024 || elapsed.inMicroseconds <= 0) return;
@@ -219,6 +242,7 @@ class RipperRangeProxy {
     await _slot(job, rescue: rescue, priority: priority);
     HttpClientRequest? request;
     final clock = Stopwatch()..start();
+    receiving?.clock = clock;
     Timer? deadline;
     int status = 0;
     int received = 0;
@@ -254,6 +278,8 @@ class RipperRangeProxy {
       final response = await request.close().timeout(
         firstByte - clock.elapsed,
       );
+      final headMs = clock.elapsedMicroseconds / 1000;
+      _headMs = _headMs == 0 ? headMs : _headMs * .7 + headMs * .3;
       status = response.statusCode;
       final match = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$').firstMatch(
         response.headers.value(HttpHeaders.contentRangeHeader) ?? '',
@@ -286,8 +312,7 @@ class RipperRangeProxy {
           receiving?.chunks.clear();
           throw const HttpException('Oversized CDN Range body');
         }
-        receiving?.chunks.add(chunk);
-        receiving?.onData?.call();
+        receiving?.add(chunk, clock.elapsedMilliseconds);
       }
       if (bytes.length != end - start + 1) {
         throw const HttpException('Truncated CDN Range body');
@@ -389,8 +414,24 @@ class RipperRangeProxy {
           : _hedgeMs;
       if (delay == 0) {
         launch(i);
-      } else {
+      } else if (metadata) {
         timers.add(Timer(Duration(milliseconds: delay), () => launch(i)));
+      } else {
+        // Checked every 50 ms like upstream, from the first check due.
+        void check() {
+          if (result.isCompleted || parent.cancelled) return;
+          if (_hedgeDue(
+            receiving.first,
+            delay,
+            track.resolver.speed(urls[i]),
+          )) {
+            launch(i);
+          } else {
+            timers.add(Timer(const Duration(milliseconds: 50), check));
+          }
+        }
+
+        timers.add(Timer(Duration(milliseconds: delay), check));
       }
     }
     try {
@@ -818,6 +859,21 @@ class _Receiving {
   Uint8List? base;
   final chunks = <List<int>>[];
   void Function()? onData;
+  // From the moment this copy held a connection: when its first and latest
+  // bytes arrived, and how many it received itself (the base excluded).
+  Stopwatch? clock;
+  int firstAt = 0;
+  int lastAt = 0;
+  int received = 0;
+
+  void add(List<int> chunk, int at) {
+    if (received == 0) firstAt = at;
+    lastAt = at;
+    received += chunk.length;
+    chunks.add(chunk);
+    onData?.call();
+  }
+
   int get length => chunks.fold(base?.length ?? 0, (n, c) => n + c.length);
   Uint8List snapshot() {
     final bytes = BytesBuilder(copy: false);
