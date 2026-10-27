@@ -212,6 +212,11 @@ jobs:
           ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
+      # flutter-action reads flutter-version-file with yq, which some windows-latest images no longer ship.
+      - name: Ensure yq is available
+        shell: bash
+        run: command -v yq >/dev/null || choco install yq -y --no-progress
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
