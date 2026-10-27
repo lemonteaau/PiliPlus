@@ -588,6 +588,75 @@ void main() {
     expect(seek.$2, source.sublist(500000, 501000));
     expect(auto.sessions, 2);
   });
+  // The proxy asks for no more pieces than it has connections, so upstream's
+  // sign of saturation (pieces queued behind busy connections) never shows.
+  // slow() steps up only while the connections were saturated.
+  Future<RipperAutoConcurrency> readSlowLink({required bool reading}) async {
+    source = Uint8List(16 << 20);
+    proxy.close();
+    final auto = RipperAutoConcurrency();
+    proxy = RipperRangeProxy(autoConcurrency: auto, userAgent: 'test');
+    await proxy.start();
+    final response = await (await client.getUrl(
+      Uri.parse(register(['/pace'])),
+    )).close();
+    final subscription = response.listen(null);
+    // A paused reader is mpv with a full cache: the proxy waits on it.
+    if (!reading) subscription.pause();
+    await Future<void>.delayed(const Duration(seconds: 4));
+    unawaited(subscription.cancel());
+    return auto;
+  }
+
+  test('a player waiting on a slow link saturates the connections', () async {
+    final auto = await readSlowLink(reading: true);
+    expect(auto.slow(), isTrue);
+    expect(auto.threads, 24);
+  });
+
+  test('throughput counts the bytes of a piece as they arrive', () async {
+    proxy.close();
+    final auto = _CountingAuto();
+    proxy = RipperRangeProxy(autoConcurrency: auto, userAgent: 'test');
+    await proxy.start();
+    final response = await (await client.getUrl(
+      Uri.parse(register(['/trickle'])),
+    )).close();
+    final subscription = response.listen(null);
+    // Half of every piece now, the rest after 3 s. Counted only as whole
+    // pieces, dozens finishing at once on a slow link swung the throughput.
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    expect(auto.received, greaterThan(100000));
+    await subscription.cancel();
+  });
+
+  test('a step up adds pieces before the next one is passed on', () async {
+    source = Uint8List(8 << 20);
+    proxy.close();
+    final auto = RipperAutoConcurrency();
+    proxy = RipperRangeProxy(autoConcurrency: auto, userAgent: 'test');
+    await proxy.start();
+    final response = await (await client.getUrl(
+      Uri.parse(register(['/primary'])),
+    )).close();
+    final subscription = response.listen(null);
+    int pieces() => requests.where((r) => r.$2 >= 65536).length;
+    // Sixteen threads at the start: twelve video pieces, all held for 10 s.
+    await Future<void>.delayed(const Duration(milliseconds: 2600));
+    expect(pieces(), 12);
+    expect(auto.stall(), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // Twenty-four threads: eighteen, without waiting for the first piece.
+    expect(pieces(), 18);
+    await subscription.cancel();
+  });
+
+  test('a player that stops reading does not saturate them', () async {
+    final auto = await readSlowLink(reading: false);
+    expect(auto.slow(), isFalse);
+    expect(auto.threads, 16);
+  });
+
   test(
     'eight-thread saturation still leaves a connection for rescue',
     () async {
@@ -707,6 +776,13 @@ void main() {
 
 class _CountingAuto extends RipperAutoConcurrency {
   int sessions = 0;
+  int received = 0;
+
+  @override
+  void delivered(int bytes) {
+    received += bytes;
+    super.delivered(bytes);
+  }
 
   @override
   void newSession() {

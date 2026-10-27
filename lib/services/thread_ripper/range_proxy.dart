@@ -83,6 +83,25 @@ class RipperRangeProxy {
   int _sequence = 0;
   int _active = 0;
   int _normalActive = 0;
+  // Writers waiting for bytes still downloading: mpv waits on the network,
+  // not the network on mpv. This is the session's saturation for automatic
+  // concurrency; once mpv's cache is full the writers wait on mpv instead.
+  final _starved = <_Feed>{};
+  void _starve(_Feed feed, bool waiting) {
+    waiting ? _starved.add(feed) : _starved.remove(feed);
+    if (!_closed) autoConcurrency?.starved(_starved.isNotEmpty);
+  }
+
+  // A new level. Waiting writers take on its piece budget at once rather than
+  // when their next piece is passed on in file order: behind a slow piece
+  // that took seconds, and a trial's five seconds measured the old level.
+  void _resize() {
+    _drain();
+    for (final feed in _starved.toList()) {
+      feed._wake();
+    }
+  }
+
   int get _normalLimit => concurrency == 1
       ? 1
       : concurrency -
@@ -102,7 +121,7 @@ class RipperRangeProxy {
     }
     _server = server;
     autoConcurrency?.newSession();
-    autoConcurrency?.onChanged = _drain;
+    autoConcurrency?.onChanged = _resize;
     // Transport disconnects can also fail response.close(); each request owns
     // its cleanup in finally, so never leak those errors to the app's zone.
     server.listen((request) => _serve(request).ignore());
@@ -160,7 +179,7 @@ class RipperRangeProxy {
     if (_closed) return;
     _closed = true;
     autoConcurrency?.onChanged = null;
-    autoConcurrency?.demand(0, concurrency, 0);
+    autoConcurrency?.starved(false);
     for (final job in _jobs.toList()) {
       job.cancel();
     }
@@ -216,7 +235,6 @@ class RipperRangeProxy {
       if (!waiter.rescue) _normalActive++;
       waiter.ready.complete();
     }
-    autoConcurrency?.demand(_active, concurrency, _waiters.length);
   }
 
   void _release({required bool rescue}) {
@@ -524,7 +542,8 @@ class RipperRangeProxy {
             feed: feed,
           );
           job.check();
-          autoConcurrency?.delivered(piece.bytes.length);
+          // A piece passed on as it arrives reported its bytes meanwhile.
+          if (feed == null) autoConcurrency?.delivered(piece.bytes.length);
           return piece;
         } catch (e) {
           error = e;
@@ -701,7 +720,7 @@ class RipperRangeProxy {
           // instead of turning the upstream 64 KiB minimum into a fixed size.
           final last = min(end, cursor + size - 1);
           final primary = primaries[batchIndex++];
-          final feed = _Feed(cursor);
+          final feed = _Feed(cursor, autoConcurrency?.delivered);
           final result =
               _download(
                 track,
@@ -736,12 +755,22 @@ class RipperRangeProxy {
           // pieces that share a slow link with the rest in flight starved
           // playback, audio first: its 64 KiB head lasts about two seconds.
           while (!feed.done) {
+            // A new level's budget applies now; see _resize.
+            budget = pieceBudget();
+            while (pieces.length < budget && cursor <= end) {
+              enqueue();
+            }
             if (feed.from(written) case final bytes?) {
               socket.add(bytes);
               written += bytes.length;
               await job.race(socket.flush());
             } else {
-              await job.race(feed.changed);
+              _starve(feed, true);
+              try {
+                await job.race(feed.changed);
+              } finally {
+                _starve(feed, false);
+              }
             }
             job.check();
           }
@@ -902,15 +931,27 @@ class _Receiving {
 /// A piece still downloading, readable up to its furthest replica. Every
 /// replica holds a verified prefix of the same bytes.
 class _Feed {
-  _Feed(this.start);
+  _Feed(this.start, this.onProgress);
   final int start;
+  // The furthest replica's gains, i.e. the piece's bytes without a copy's
+  // repeats, as automatic concurrency's throughput. Counted as whole pieces,
+  // dozens finishing together on a slow link swung it by half either way.
+  final void Function(int bytes)? onProgress;
+  int _most = 0;
   final _replicas = <_Receiving>[];
   Completer<void>? _waiter;
   bool done = false;
 
   void add(_Receiving replica) {
     _replicas.add(replica);
-    replica.onData = _wake;
+    replica.onData = () {
+      final length = (replica.base?.length ?? 0) + replica.received;
+      if (length > _most) {
+        onProgress?.call(length - _most);
+        _most = length;
+      }
+      _wake();
+    };
   }
 
   void _wake() {
