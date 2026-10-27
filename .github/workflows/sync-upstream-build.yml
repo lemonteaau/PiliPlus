@@ -212,10 +212,18 @@ jobs:
           ref: ${{ needs.sync.outputs.commit_sha }}
           fetch-depth: 0
 
-      # flutter-action reads flutter-version-file with yq, which some windows-latest images no longer ship.
+      # flutter-action reads flutter-version-file with yq and installs it through Chocolatey,
+      # whose community feed often answers 503. Fetch the binary from GitHub instead.
       - name: Ensure yq is available
-        shell: bash
-        run: command -v yq >/dev/null || choco install yq -y --no-progress
+        shell: pwsh
+        run: |
+          if (-not (Get-Command yq -ErrorAction SilentlyContinue)) {
+            $dir = Join-Path $env:RUNNER_TEMP 'yq'
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Invoke-WebRequest -Uri https://github.com/mikefarah/yq/releases/latest/download/yq_windows_amd64.exe `
+              -OutFile (Join-Path $dir 'yq.exe') -MaximumRetryCount 3 -RetryIntervalSec 5
+            Add-Content -Path $env:GITHUB_PATH -Value $dir
+          }
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
