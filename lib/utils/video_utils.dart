@@ -203,7 +203,7 @@ abstract final class VideoUtils {
       orElse: () => targetQaVideoList.first,
     );
 
-    return (targetQuality, targetFormat, targetDecode, targetVideo);
+    return (targetVideo.id, targetFormat, targetDecode, targetVideo);
   }
 
   static AudioItem findTargetAudio(
