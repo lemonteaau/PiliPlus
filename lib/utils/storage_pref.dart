@@ -290,10 +290,14 @@ abstract final class Pref {
     SettingBoxKey.threadRipperEpisodeEnabled,
     defaultValue: true,
   );
-  // Overseas nodes by default (most fork users are abroad; upstream defaults
-  // to mainland); automatic thread count as upstream.
+  // Mainland nodes by default, as upstream. The switch picks the CDN pool,
+  // not where the viewer is: upstream recommends mainland nodes for viewers
+  // abroad too, because overseas edges don't cache cold videos and the
+  // multi-thread download makes up for the long route. Overseas nodes are
+  // only for viewers whose route to mainland is poor. Automatic thread count
+  // as upstream.
   static bool get threadRipperOverseas =>
-      _setting.get(SettingBoxKey.threadRipperOverseas, defaultValue: true);
+      _setting.get(SettingBoxKey.threadRipperOverseas, defaultValue: false);
   static bool get threadRipperAutoConcurrency => _setting.get(
     SettingBoxKey.threadRipperAutoConcurrency,
     defaultValue: true,
