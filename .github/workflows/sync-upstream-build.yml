@@ -79,7 +79,8 @@ jobs:
           read -r existing_tag existing_commit existing_published <<< "$latest_release"
           changed=""
           if [ -n "$existing_commit" ] && git cat-file -e "${existing_commit}^{commit}" 2>/dev/null; then
-            changed="$(git diff --name-only "$existing_commit" "$after" | grep -v '\.md$' || true)"
+            # Markdown and CI-only edits don't need a new build.
+            changed="$(git diff --name-only "$existing_commit" "$after" | grep -v -e '\.md$' -e '^\.github/' || true)"
           else
             changed="unknown"
           fi
@@ -101,7 +102,8 @@ jobs:
           elif [ -n "$changed" ] && [ "$age_days" -ge 7 ]; then
             reason="code changed and last fork release $existing_tag is $age_days days old"
           fi
-          echo "Last fork release: ${existing_tag:-none}, $age_days days old; non-Markdown changes since: ${changed:+yes}${changed:-no}"
+          if [ -n "$changed" ]; then has_changes=yes; else has_changes=no; fi
+          echo "Last fork release: ${existing_tag:-none}, $age_days days old; code changes since: $has_changes"
 
           if [ -z "$reason" ]; then
             echo "No build: waiting for a new upstream release or 7 days since $existing_tag."
