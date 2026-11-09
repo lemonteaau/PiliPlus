@@ -1,16 +1,17 @@
 name: Sync upstream and build custom apps
 
 on:
-  push:
-    branches:
-      - main
-    # Docs-only pushes need no new build; the sync job also skips them on schedule.
-    paths-ignore:
-      - "**.md"
   schedule:
-    # Every 4 days at 18:17 UTC (02:17 Beijing), after upstream's day is over.
-    - cron: "17 18 */4 * *"
+    # Twice a day: merge upstream code. A full build only runs when upstream
+    # publishes a new release, or when 7 days have passed since the last fork
+    # release and the code has changed (see "Decide whether to build").
+    - cron: "17 6,18 * * *"
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: Build and release now, ignoring the 7-day rule
+        type: boolean
+        default: false
 
 concurrency:
   group: sync-upstream-build
@@ -74,18 +75,39 @@ jobs:
             git push origin HEAD:main
           fi
 
-          latest_release="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '[.[] | select(.draft == false and .prerelease == false)][0] // {} | [.tag_name // "", .target_commitish // ""] | @tsv')"
-          read -r existing_tag existing_commit <<< "$latest_release"
-          # Skip when nothing but Markdown changed since the latest release of this upstream version.
+          latest_release="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '[.[] | select(.draft == false and .prerelease == false)][0] // {} | [.tag_name // "", .target_commitish // "", .published_at // ""] | @tsv')"
+          read -r existing_tag existing_commit existing_published <<< "$latest_release"
           changed=""
           if [ -n "$existing_commit" ] && git cat-file -e "${existing_commit}^{commit}" 2>/dev/null; then
             changed="$(git diff --name-only "$existing_commit" "$after" | grep -v '\.md$' || true)"
           else
             changed="unknown"
           fi
-          if [[ -z "$changed" && "$existing_tag" == "v${upstream_version}-fork."* ]]; then
+          age_days=999
+          if [ -n "$existing_published" ]; then
+            age_days=$(( ( $(date -u +%s) - $(date -u -d "$existing_published" +%s) ) / 86400 ))
+          fi
+
+          # Decide whether to build:
+          #   1. manual run with force_build        -> build
+          #   2. upstream published a new release   -> build now (restarts the 7-day clock)
+          #   3. code changed and the last fork release is 7+ days old -> build
+          #   otherwise only the merged code is pushed.
+          reason=""
+          if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "${{ inputs.force_build }}" = true ]; then
+            reason="manual force_build"
+          elif [ -z "$existing_tag" ] || [[ "$existing_tag" != "v${upstream_version}-fork."* ]]; then
+            reason="new upstream release $upstream_release_tag (last fork release: ${existing_tag:-none})"
+          elif [ -n "$changed" ] && [ "$age_days" -ge 7 ]; then
+            reason="code changed and last fork release $existing_tag is $age_days days old"
+          fi
+          echo "Last fork release: ${existing_tag:-none}, $age_days days old; non-Markdown changes since: ${changed:+yes}${changed:-no}"
+
+          if [ -z "$reason" ]; then
+            echo "No build: waiting for a new upstream release or 7 days since $existing_tag."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           else
+            echo "Building: $reason"
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             # Tag now, while this commit is still the head of main. GITHUB_TOKEN may
             # not tag a commit whose workflow files differ from main's, so tagging at
@@ -157,6 +179,8 @@ jobs:
           name: PiliPlus-custom-Android-${{ github.run_number }}
           path: build/app/outputs/flutter-apk/app-*-release.apk
           if-no-files-found: error
+          # The release keeps every build; this artifact only carries files to the release job.
+          retention-days: 1
 
   ios:
     name: Build unsigned iOS IPA
@@ -199,6 +223,8 @@ jobs:
           name: PiliPlus-custom-iOS-${{ github.run_number }}
           path: PiliPlus-custom-ios-unsigned.ipa
           if-no-files-found: error
+          # The release keeps every build; this artifact only carries files to the release job.
+          retention-days: 1
 
   windows:
     name: Build Windows x64
@@ -268,6 +294,8 @@ jobs:
           name: PiliPlus-custom-Windows-${{ github.run_number }}
           path: release/*
           if-no-files-found: error
+          # The release keeps every build; this artifact only carries files to the release job.
+          retention-days: 1
 
   macos:
     name: Build macOS DMG
@@ -314,6 +342,8 @@ jobs:
           name: PiliPlus-custom-macOS-${{ github.run_number }}
           path: release/PiliPlus-custom-macos.dmg
           if-no-files-found: error
+          # The release keeps every build; this artifact only carries files to the release job.
+          retention-days: 1
 
   linux:
     name: Build Linux x64 packages
@@ -535,6 +565,8 @@ jobs:
           name: PiliPlus-custom-Linux-${{ github.run_number }}
           path: release/*
           if-no-files-found: error
+          # The release keeps every build; this artifact only carries files to the release job.
+          retention-days: 1
 
   release:
     name: Publish custom release
