@@ -309,7 +309,8 @@
       "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
       "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
       "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-      "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+      "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+      "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb"
     ],
     "steps": [
       {
@@ -337,13 +338,14 @@
           "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb"
         ]
       },
       {
         "op": "success",
         "args": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           900000
         ]
       },
@@ -358,10 +360,83 @@
         "op": "rescueCandidates",
         "args": [],
         "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+        ]
+      },
+      {
+        "op": "rangeCandidates",
+        "args": [],
+        "expected": [
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb"
+        ]
+      },
+      {
+        "op": "rangeCandidates",
+        "args": [],
+        "expected": [
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb"
+        ]
+      },
+      {
+        "op": "rangeCandidates",
+        "args": [],
+        "expected": [
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb"
+        ]
+      },
+      {
+        "op": "rangeCandidates",
+        "args": [],
+        "expected": [
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+        ]
+      },
+      {
+        "op": "rangeCandidates",
+        "args": [],
+        "expected": [
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb"
+        ]
+      },
+      {
+        "op": "rangeCandidates",
+        "args": [],
+        "expected": [
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
@@ -372,84 +447,12 @@
         "op": "rangeCandidates",
         "args": [],
         "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb"
-        ]
-      },
-      {
-        "op": "rangeCandidates",
-        "args": [],
-        "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb"
-        ]
-      },
-      {
-        "op": "rangeCandidates",
-        "args": [],
-        "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb"
-        ]
-      },
-      {
-        "op": "rangeCandidates",
-        "args": [],
-        "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb"
-        ]
-      },
-      {
-        "op": "rangeCandidates",
-        "args": [],
-        "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb"
-        ]
-      },
-      {
-        "op": "rangeCandidates",
-        "args": [],
-        "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb"
-        ]
-      },
-      {
-        "op": "rangeCandidates",
-        "args": [],
-        "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb"
         ]
       },
       {
@@ -465,7 +468,8 @@
           "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb"
         ]
       },
       {
@@ -480,6 +484,7 @@
           "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb"
         ]
@@ -494,6 +499,7 @@
           "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
@@ -508,6 +514,7 @@
         "expected": [
           "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
@@ -522,6 +529,7 @@
           4
         ],
         "expected": [
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorali.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
@@ -556,25 +564,26 @@
         "op": "rescueCandidates",
         "args": [],
         "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
         ]
       },
       {
         "op": "rangeCandidates",
         "args": [],
         "expected": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb"
         ]
       },
       {
@@ -594,14 +603,14 @@
       {
         "op": "sample",
         "args": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
           1500000
         ]
       },
       {
         "op": "speed",
         "args": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb"
         ],
         "expected": 1110000
       },
@@ -614,7 +623,7 @@
       {
         "op": "speed",
         "args": [
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb"
         ],
         "expected": 0
       },
@@ -622,12 +631,12 @@
         "op": "rangeCandidates",
         "args": [],
         "expected": [
-          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorbd.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirror14b.bilivideo.com/v.m4s?sign=a%2Bb",
           "https://upos-sz-estgoss.bilivideo.com/v.m4s?sign=a%2Bb",
-          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb"
+          "https://upos-sz-mirrorcos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorcoso1.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorhw.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirrorbos.bilivideo.com/v.m4s?sign=a%2Bb",
+          "https://upos-sz-mirror08c.bilivideo.com/v.m4s?sign=a%2Bb"
         ]
       }
     ]

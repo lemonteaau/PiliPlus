@@ -1,4 +1,4 @@
-// Adapted from Bilibili-thread-ripper 0.9.4.2, MIT.
+// Adapted from Bilibili-thread-ripper 0.9.4.2, MIT (relay rules: 2026.11.15.1).
 // See docs/thread-ripper.md and docs/licenses/bilibili-thread-ripper.txt.
 import 'dart:math';
 
@@ -12,6 +12,7 @@ class RipperCdnResolver {
     'upos-sz-mirror14b.bilivideo.com',
     'upos-sz-estgoss.bilivideo.com',
     'upos-sz-mirrorcos.bilivideo.com',
+    'upos-sz-mirrorcoso1.bilivideo.com',
   ];
   static const overseasHosts = [
     'upos-sz-mirrorcosov.bilivideo.com',
@@ -40,13 +41,33 @@ class RipperCdnResolver {
         : null;
   }
 
+  static final _relayHost = RegExp(r'(^|\.)mcdn\.', caseSensitive: false);
+
+  // A P2P or edge-cache relay (an mcdn node, or the mountaintoys.cn caches
+  // beside them) wraps the file in its own path and signature. Its address
+  // works only on relays: every ordinary node refuses it with HTTP 403.
+  static bool isRelay(Uri url) {
+    if (_relayHost.hasMatch(url.host) ||
+        url.path.toLowerCase().startsWith('/v1/resource/')) {
+      return true;
+    }
+    try {
+      return url.queryParameters['os']?.toLowerCase() == 'mcdn';
+    } on FormatException {
+      return false;
+    }
+  }
+
   static List<Uri> candidates(
     Iterable<String> urls, {
     required bool overseas,
     List<String> customHosts = const [],
   }) {
     final originals = urls.map(Uri.parse).where(supports).toSet().toList();
-    final donors = originals.where((u) => !u.host.endsWith('.akamaized.net'));
+    // Only ordinary addresses are moved to the other nodes: a relay address
+    // signed for another node is refused there.
+    final ordinary = originals.where((u) => !isRelay(u)).toList();
+    final donors = ordinary.where((u) => !u.host.endsWith('.akamaized.net'));
     final custom = customHosts
         .map(normalizeHost)
         .whereType<String>()
@@ -67,8 +88,11 @@ class RipperCdnResolver {
             : mainlandHosts.contains(u.host),
       ),
       for (final host in hosts)
-        for (final donor in donors.isEmpty ? originals : donors.take(1))
+        for (final donor in donors.isEmpty ? ordinary : donors.take(1))
           donor.replace(host: host, port: 443),
+      // Bilibili sometimes hands a track out only through relays. No other
+      // node can serve it then, so the relays are used whatever the mode.
+      if (ordinary.isEmpty) ...originals,
     }.toList();
   }
 

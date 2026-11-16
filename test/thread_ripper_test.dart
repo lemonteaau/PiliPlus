@@ -51,6 +51,68 @@ void main() {
     },
   );
 
+  test('relay addresses are never moved to ordinary nodes (upstream #47)', () {
+    const mcdn =
+        'https://xy1x2x3x4xy.mcdn.bilivideo.cn:4483/upgcxcode/v.m4s?sign=relay';
+    const coso1Relay =
+        'https://upos-sz-mirrorcoso1.bilivideo.com/upgcxcode/v.m4s?os=mcdn&sign=relay2';
+    const resource =
+        'https://cache.mountaintoys.cn/v1/resource/v.m4s?sign=relay';
+    const good = '/upgcxcode/v.m4s?sign=good';
+    List<String> nodes(List<String> hosts) => [
+      for (final host in hosts) 'https://$host$good',
+    ];
+    // Expected lists come from upstream 2026.11.15.1 representationUrls().
+    final cases = <(List<String>, bool, List<String>)>[
+      (
+        [mcdn, 'https://upos-sz-mirrorali.bilivideo.com$good'],
+        true,
+        [mcdn, ...nodes(RipperCdnResolver.overseasHosts)],
+      ),
+      (
+        [mcdn, 'https://upos-sz-mirrorali.bilivideo.com$good'],
+        false,
+        nodes(RipperCdnResolver.mainlandHosts),
+      ),
+      ([mcdn, coso1Relay], true, [mcdn, coso1Relay]),
+      ([mcdn, coso1Relay], false, [coso1Relay, mcdn]),
+      (
+        [resource, 'https://video.akamaized.net$good'],
+        true,
+        [
+          resource,
+          'https://video.akamaized.net$good',
+          ...nodes(RipperCdnResolver.overseasHosts),
+        ],
+      ),
+      (
+        [resource, 'https://video.akamaized.net$good'],
+        false,
+        nodes(RipperCdnResolver.mainlandHosts),
+      ),
+    ];
+    for (final (input, overseas, expected) in cases) {
+      expect(
+        RipperCdnResolver.candidates(
+          input,
+          overseas: overseas,
+        ).map((u) => u.toString()).toList(),
+        expected,
+        reason: '$input overseas=$overseas',
+      );
+    }
+    expect(
+      RipperCdnResolver.isRelay(
+        Uri.parse('https://upos-sz-mirrorali.bilivideo.com$good'),
+      ),
+      isFalse,
+    );
+    expect(
+      RipperCdnResolver.mainlandHosts.last,
+      'upos-sz-mirrorcoso1.bilivideo.com',
+    );
+  });
+
   test('open, bounded, suffix and invalid downstream ranges', () {
     expect(RipperRangeProxy.parseRange(null, 100), (0, 99));
     expect(RipperRangeProxy.parseRange('bytes=20-', 100), (20, 99));
