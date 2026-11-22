@@ -18,9 +18,12 @@ class RipperRangeProxy {
     required this.userAgent,
     this.referer = 'https://www.bilibili.com/',
     this.onActiveRequestsChanged,
+    DateTime Function()? now,
   }) : _fixedConcurrency = concurrency,
+       _now = now ?? DateTime.now,
        assert(concurrency > 0 && concurrency <= 128);
 
+  final DateTime Function() _now;
   final void Function(int active)? onActiveRequestsChanged;
   final int _fixedConcurrency;
   final RipperAutoConcurrency? autoConcurrency;
@@ -76,9 +79,8 @@ class RipperRangeProxy {
   final _tracks = <String, _Track>{};
   final _bans = RipperBanList();
   final _jobs = <_Job>{};
-  final _client = HttpClient()
-    ..autoUncompress = false
-    ..connectionTimeout = const Duration(milliseconds: 5500);
+  HttpClient _client = _newClient();
+  DateTime? _lastUpstreamActivity;
   final _waiters = <_Waiter>[];
   int _sequence = 0;
   int _active = 0;
@@ -93,6 +95,65 @@ class RipperRangeProxy {
     24,
     (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
   ).join();
+
+  static const _preHeaderBudget = Duration(milliseconds: 4200);
+  static const _startupFirstByte = Duration(milliseconds: 3800);
+  static const _steadyFirstByte = Duration(milliseconds: 5500);
+  static const _idleResetGap = Duration(seconds: 60);
+  static const _minValidUnixSeconds = 1000000000;
+  static const _maxValidUnixSeconds = 100000000000;
+  static const _minTrustedDeadlineTtl = Duration(minutes: 5);
+
+  static HttpClient _newClient() => HttpClient()
+    ..autoUncompress = false
+    ..idleTimeout = const Duration(seconds: 15)
+    ..connectionTimeout = const Duration(milliseconds: 5500);
+
+  void _resetClientIfStale() {
+    if (_closed) return;
+    final last = _lastUpstreamActivity;
+    if (last == null || _now().difference(last) <= _idleResetGap) return;
+    final old = _client;
+    _client = _newClient();
+    old.close();
+    _lastUpstreamActivity = _now();
+  }
+
+  static DateTime? _extractDeadline(Iterable<Uri> urls) {
+    DateTime? earliest;
+    for (final uri in urls) {
+      final param = uri.queryParameters['deadline'];
+      if (param == null || param.isEmpty) continue;
+      final seconds = int.tryParse(param);
+      if (seconds == null ||
+          seconds < _minValidUnixSeconds ||
+          seconds >= _maxValidUnixSeconds) {
+        continue;
+      }
+      final candidate = DateTime.fromMillisecondsSinceEpoch(
+        seconds * 1000,
+        isUtc: true,
+      );
+      if (earliest == null || candidate.isBefore(earliest)) {
+        earliest = candidate;
+      }
+    }
+    return earliest;
+  }
+
+  DateTime? _resolveTrustedDeadline(List<Uri> urls, List<Uri>? originals) {
+    final raw =
+        (originals != null ? _extractDeadline(originals) : null) ??
+        _extractDeadline(urls);
+    if (raw == null) return null;
+    // Guard against a device clock skewed ahead of Bilibili's server clock:
+    // only arm local deadline fast-fail when registration sees >= 5 min TTL.
+    if (raw.difference(_now()) < _minTrustedDeadlineTtl) return null;
+    return raw;
+  }
+
+  bool _isTrackExpired(_Track track) =>
+      track.deadline != null && !_now().isBefore(track.deadline!);
 
   Future<void> start() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -140,6 +201,7 @@ class RipperRangeProxy {
       throw StateError('No download session or media candidates');
     }
     final id = '/$_token/${_tracks.length}';
+    final deadline = _resolveTrustedDeadline(urls, originals);
     _tracks[id] = _Track(
       RipperCdnResolver(
         urls,
@@ -152,6 +214,7 @@ class RipperRangeProxy {
         originals: originals,
       ),
       isAudio,
+      deadline: deadline,
     );
     return 'http://127.0.0.1:${_server!.port}$id';
   }
@@ -235,11 +298,14 @@ class RipperRangeProxy {
     required bool rescue,
     required int priority,
     bool clip = false,
+    Duration firstByteTimeout = _steadyFirstByte,
+    Duration attemptDeadline = const Duration(seconds: 15),
     _Resume? resume,
     _Receiving? receiving,
     _Receiving? primary,
   }) async {
     await _slot(job, rescue: rescue, priority: priority);
+    final client = _client;
     HttpClientRequest? request;
     final clock = Stopwatch()..start();
     receiving?.clock = clock;
@@ -263,11 +329,10 @@ class RipperRangeProxy {
       }
       // Like upstream, one first-byte timeout covers connecting and the
       // response head together.
-      const firstByte = Duration(milliseconds: 5500);
-      request = await _client.getUrl(url).timeout(firstByte);
+      request = await client.getUrl(url).timeout(firstByteTimeout);
       job.check();
       job.requests.add(request);
-      deadline = Timer(const Duration(seconds: 15), () {
+      deadline = Timer(attemptDeadline, () {
         request?.abort(const HttpException('Range attempt timed out'));
       });
       request.headers
@@ -275,9 +340,11 @@ class RipperRangeProxy {
         ..set(HttpHeaders.acceptEncodingHeader, 'identity')
         ..set(HttpHeaders.userAgentHeader, userAgent)
         ..set(HttpHeaders.refererHeader, referer);
-      final response = await request.close().timeout(
-        firstByte - clock.elapsed,
-      );
+      final remainingHead = firstByteTimeout - clock.elapsed;
+      if (remainingHead <= Duration.zero) {
+        throw TimeoutException('Range first-byte timed out', firstByteTimeout);
+      }
+      final response = await request.close().timeout(remainingHead);
       final headMs = clock.elapsedMicroseconds / 1000;
       _headMs = _headMs == 0 ? headMs : _headMs * .7 + headMs * .3;
       status = response.statusCode;
@@ -294,7 +361,11 @@ class RipperRangeProxy {
           match == null ||
           int.parse(match[1]!) != start ||
           int.parse(match[2]!) != end) {
-        throw const HttpException('Invalid CDN Range response');
+        throw _UpstreamStatusException(
+          'Invalid CDN Range response',
+          response.statusCode,
+          received,
+        );
       }
       final total = int.parse(match[3]!);
       if (total <= end || (track.total != null && total != track.total)) {
@@ -306,6 +377,7 @@ class RipperRangeProxy {
       await for (final chunk in response.timeout(const Duration(seconds: 4))) {
         job.check();
         received += chunk.length;
+        _lastUpstreamActivity = _now();
         autoConcurrency?.activity();
         bytes.add(chunk);
         if (bytes.length > end - start + 1) {
@@ -318,6 +390,7 @@ class RipperRangeProxy {
         throw const HttpException('Truncated CDN Range body');
       }
       completed = true;
+      _lastUpstreamActivity = _now();
       _measure(received, clock.elapsed);
       track.resolver.success(url, bytes.length, clock.elapsed);
       final result = BytesBuilder(copy: false);
@@ -360,6 +433,10 @@ class RipperRangeProxy {
     bool metadata = false,
     bool startup = false,
     bool hurry = false,
+    Duration firstByteTimeout = _steadyFirstByte,
+    Duration attemptDeadline = const Duration(seconds: 15),
+    Set<Uri>? authFailed,
+    Set<Uri>? nonAuthFailed,
     _Resume? resume,
     _Feed? feed,
   }) async {
@@ -386,6 +463,8 @@ class RipperRangeProxy {
         rescue: index > 0,
         priority: priority + (index > 0 && !metadata ? 20 : 0),
         clip: metadata,
+        firstByteTimeout: firstByteTimeout,
+        attemptDeadline: attemptDeadline,
         resume: resume,
         receiving: metadata ? null : receiving[index],
         primary: index > 0 ? receiving.first : null,
@@ -394,6 +473,11 @@ class RipperRangeProxy {
           if (!result.isCompleted) result.complete(piece);
         },
         onError: (Object error, StackTrace stack) {
+          if (error is _UpstreamStatusException && error.isAuthExpired) {
+            authFailed?.add(urls[index]);
+          } else if (!parent.cancelled) {
+            nonAuthFailed?.add(urls[index]);
+          }
           failures++;
           if (index == 0 && urls.length > 1 && !metadata) launch(1);
           if (failures == urls.length && !result.isCompleted) {
@@ -458,81 +542,225 @@ class RipperRangeProxy {
     bool metadata = false,
     bool startup = false,
     bool hurry = false,
+    Duration? preHeaderBudget,
     _Feed? feed,
   }) async {
+    job.check();
+    if (_isTrackExpired(track)) {
+      throw const _AuthExpiredException();
+    }
+    _resetClientIfStale();
     final clock = Stopwatch()..start();
     final resume = _Resume(end - start + 1);
+    final originalSet = track.resolver.originals.toSet();
+    final downloadJob = preHeaderBudget == null ? job : _Job();
+    Timer? budgetTimer;
+    var budgetTimedOut = false;
+    if (preHeaderBudget != null) {
+      if (preHeaderBudget <= Duration.zero) {
+        throw TimeoutException('Pre-header budget exhausted', _preHeaderBudget);
+      }
+      job.children.add(downloadJob);
+      budgetTimer = Timer(preHeaderBudget, () {
+        budgetTimedOut = true;
+        downloadJob.cancel();
+      });
+    }
+
+    Duration effectiveFirstByte() {
+      final base = (startup || metadata)
+          ? _startupFirstByte
+          : _steadyFirstByte;
+      if (preHeaderBudget == null) return base;
+      final remaining = preHeaderBudget - clock.elapsed;
+      if (remaining <= Duration.zero) return const Duration(milliseconds: 1);
+      return remaining < base ? remaining : base;
+    }
+
+    Duration effectiveAttemptDeadline() {
+      const base = Duration(seconds: 15);
+      if (preHeaderBudget == null) return base;
+      final remaining = preHeaderBudget - clock.elapsed;
+      if (remaining <= Duration.zero) return const Duration(milliseconds: 1);
+      return remaining < base ? remaining : base;
+    }
+
     Object error = const HttpException('No available CDN');
-    for (var round = 0; round < 3; round++) {
-      job.check();
-      if (round > 0) {
-        if (clock.elapsed > const Duration(seconds: 25)) break;
-        await job.race(
-          Future<void>.delayed(
-            Duration(milliseconds: 500 * (1 << (round - 1))),
-          ),
-        );
-      }
-      if (metadata) {
-        var urls = track.resolver.startupCandidates().take(3).toList();
-        if (urls.isEmpty && round > 0) {
-          urls = track.resolver.ordered(round).take(3).toList();
-        }
-        if (urls.isEmpty) break;
-        try {
-          return await _race(
-            track,
-            urls,
-            start,
-            end,
-            job,
-            priority: 220,
-            metadata: true,
-          );
-        } catch (e) {
-          error = e;
-        }
-        continue;
-      }
-      final candidates = track.resolver.pieceCandidates(
-        preferred,
-        pieceIndex,
-        round,
-      );
-      final limit = min(8, candidates.length);
-      final tried = <Uri>{};
-      while (tried.length < limit) {
+    final metadataAuth = <Uri>{};
+    try {
+      for (var round = 0; round < 3; round++) {
         job.check();
-        final untried = candidates.where((u) => !tried.contains(u)).toList();
-        final allowed = untried.where(track.resolver.bans.allows).toList();
-        final pair = (allowed.isEmpty ? untried : allowed)
-            .take(min(startup ? limit : 2, limit - tried.length))
-            .toList();
-        if (pair.isEmpty) break;
-        tried.addAll(pair);
-        try {
-          final piece = await _race(
-            track,
-            pair,
-            start,
-            end,
-            job,
-            priority: priority,
-            startup: startup,
-            hurry: hurry,
-            resume: resume,
-            feed: feed,
+        if (budgetTimedOut) {
+          throw TimeoutException(
+            'Pre-header budget exhausted',
+            preHeaderBudget,
           );
-          job.check();
-          autoConcurrency?.delivered(piece.bytes.length);
-          return piece;
-        } catch (e) {
-          error = e;
         }
+        if (_isTrackExpired(track)) {
+          throw const _AuthExpiredException();
+        }
+        if (round > 0) {
+          if (clock.elapsed > const Duration(seconds: 25)) break;
+          final backoff = Duration(milliseconds: 500 * (1 << (round - 1)));
+          if (preHeaderBudget != null) {
+            final remaining = preHeaderBudget - clock.elapsed;
+            if (remaining <= backoff + const Duration(milliseconds: 300)) {
+              break;
+            }
+          }
+          await downloadJob.race(Future<void>.delayed(backoff));
+        }
+        if (metadata) {
+          var urls = track.resolver.startupCandidates().take(3).toList();
+          if (urls.isEmpty && round > 0) {
+            urls = track.resolver.ordered(round).take(3).toList();
+          }
+          if (urls.isEmpty) break;
+          final batchAuth = <Uri>{};
+          final batchNonAuth = <Uri>{};
+          try {
+            return await _race(
+              track,
+              urls,
+              start,
+              end,
+              downloadJob,
+              priority: 220,
+              metadata: true,
+              firstByteTimeout: effectiveFirstByte(),
+              attemptDeadline: effectiveAttemptDeadline(),
+              authFailed: batchAuth,
+              nonAuthFailed: batchNonAuth,
+            );
+          } catch (e) {
+            error = e;
+            if (budgetTimedOut) {
+              throw TimeoutException(
+                'Pre-header budget exhausted',
+                preHeaderBudget,
+              );
+            }
+            metadataAuth.addAll(batchAuth);
+            if (batchNonAuth.isNotEmpty) {
+              _resetClientIfStale();
+            }
+            final allBatchAuth =
+                batchNonAuth.isEmpty && batchAuth.length == urls.length;
+            final allOriginalsAuthFailed =
+                originalSet.isNotEmpty &&
+                originalSet.every(metadataAuth.contains);
+            final allKnownAuthFailed =
+                track.resolver.urls.every(metadataAuth.contains);
+            if (allBatchAuth &&
+                (allOriginalsAuthFailed || allKnownAuthFailed)) {
+              throw const _AuthExpiredException();
+            }
+          }
+          continue;
+        }
+        final candidates = track.resolver.pieceCandidates(
+          preferred,
+          pieceIndex,
+          round,
+        );
+        final baseLimit = min(8, candidates.length);
+        final baseCandidates = candidates.take(baseLimit).toList();
+        final baseSet = baseCandidates.toSet();
+        final candidatesInOriginals = candidates
+            .where(originalSet.contains)
+            .toList();
+        final roundCandidates = <Uri>[
+          ...baseCandidates,
+          for (final u in candidatesInOriginals)
+            if (!baseSet.contains(u)) u,
+        ];
+        final limit = roundCandidates.length;
+        final tried = <Uri>{};
+        final roundAuth = <Uri>{};
+        var hadNonAuthFailure = false;
+        while (tried.length < limit) {
+          job.check();
+          if (budgetTimedOut) {
+            throw TimeoutException(
+              'Pre-header budget exhausted',
+              preHeaderBudget,
+            );
+          }
+          if (_isTrackExpired(track)) {
+            throw const _AuthExpiredException();
+          }
+          final untried = roundCandidates
+              .where((u) => !tried.contains(u))
+              .toList();
+          final allowed = untried.where(track.resolver.bans.allows).toList();
+          final pair = (allowed.isEmpty ? untried : allowed)
+              .take(min(startup ? limit : 2, limit - tried.length))
+              .toList();
+          if (pair.isEmpty) break;
+          tried.addAll(pair);
+          final batchAuth = <Uri>{};
+          final batchNonAuth = <Uri>{};
+          try {
+            final piece = await _race(
+              track,
+              pair,
+              start,
+              end,
+              downloadJob,
+              priority: priority,
+              startup: startup,
+              hurry: hurry,
+              firstByteTimeout: effectiveFirstByte(),
+              attemptDeadline: effectiveAttemptDeadline(),
+              authFailed: batchAuth,
+              nonAuthFailed: batchNonAuth,
+              resume: resume,
+              feed: feed,
+            );
+            job.check();
+            autoConcurrency?.delivered(piece.bytes.length);
+            return piece;
+          } catch (e) {
+            error = e;
+            if (budgetTimedOut) {
+              throw TimeoutException(
+                'Pre-header budget exhausted',
+                preHeaderBudget,
+              );
+            }
+            roundAuth.addAll(batchAuth);
+            if (batchNonAuth.isNotEmpty) {
+              hadNonAuthFailure = true;
+              _resetClientIfStale();
+            }
+            final allBatchAuth =
+                batchNonAuth.isEmpty && batchAuth.length == pair.length;
+            final allOriginalsAuthFailed =
+                candidatesInOriginals.isNotEmpty &&
+                candidatesInOriginals.every(roundAuth.contains);
+            final allCandidatesAuthFailed =
+                tried.length >= limit &&
+                !hadNonAuthFailure &&
+                roundAuth.length == tried.length &&
+                (originalSet.isEmpty ||
+                    candidatesInOriginals.isEmpty ||
+                    allOriginalsAuthFailed);
+            if (allBatchAuth &&
+                (allOriginalsAuthFailed || allCandidatesAuthFailed)) {
+              throw const _AuthExpiredException();
+            }
+          }
+        }
+      }
+      job.check();
+      throw error;
+    } finally {
+      budgetTimer?.cancel();
+      if (!identical(downloadJob, job)) {
+        downloadJob.cancel();
+        job.children.remove(downloadJob);
       }
     }
-    job.check();
-    throw error;
   }
 
   Future<void> _serve(HttpRequest request) async {
@@ -592,7 +820,16 @@ class RipperRangeProxy {
     }
 
     bool sentHeaders = false;
+    final preHeaderClock = Stopwatch()..start();
+    Duration remainingPreHeaderBudget() {
+      final remaining = _preHeaderBudget - preHeaderClock.elapsed;
+      return remaining > Duration.zero ? remaining : Duration.zero;
+    }
+
     try {
+      if (_isTrackExpired(track)) {
+        throw const _AuthExpiredException();
+      }
       final range = request.headers.value(HttpHeaders.rangeHeader);
       _Piece? probe;
       if (track.total == null) {
@@ -605,6 +842,7 @@ class RipperRangeProxy {
           fromStart ? 64 * 1024 - 1 : 0,
           job,
           metadata: true,
+          preHeaderBudget: remainingPreHeaderBudget(),
         );
         track.total = probe.total;
       }
@@ -636,6 +874,7 @@ class RipperRangeProxy {
                 preferred: track.resolver.rangeCandidates(),
                 startup: true,
                 priority: 220,
+                preHeaderBudget: remainingPreHeaderBudget(),
               );
         job.check();
         writeHead(status, end - start + 1, contentRange);
@@ -776,6 +1015,13 @@ class RipperRangeProxy {
         );
         await job.race(socket.close());
       } catch (_) {}
+    } on _AuthExpiredException {
+      if (!sentHeaders) {
+        try {
+          writeHead(HttpStatus.forbidden, 0);
+          await job.race(socket.close());
+        } catch (_) {}
+      }
     } catch (_) {
       // After the headers, the reset in finally makes a truncated byte stream
       // visible to mpv instead of pretending it completed.
@@ -795,6 +1041,7 @@ class RipperRangeProxy {
   static const _reasons = {
     HttpStatus.ok: 'OK',
     HttpStatus.partialContent: 'Partial Content',
+    HttpStatus.forbidden: 'Forbidden',
     HttpStatus.requestedRangeNotSatisfiable: 'Range Not Satisfiable',
     HttpStatus.badGateway: 'Bad Gateway',
   };
@@ -826,12 +1073,45 @@ class RipperRangeProxy {
 }
 
 class _Track {
-  _Track(this.resolver, this.isAudio);
+  _Track(this.resolver, this.isAudio, {this.deadline});
   final bool isAudio;
+  final DateTime? deadline;
   final RipperCdnResolver resolver;
   int? total;
   _Job? request;
   bool opened = false;
+}
+
+class _UpstreamStatusException implements HttpException {
+  const _UpstreamStatusException(
+    this.message,
+    this.statusCode,
+    this.received,
+  );
+  @override
+  final String message;
+  @override
+  Uri? get uri => null;
+  final int statusCode;
+  final int received;
+
+  bool get isAuthExpired =>
+      received == 0 &&
+      (statusCode == HttpStatus.forbidden || statusCode == HttpStatus.gone);
+
+  @override
+  String toString() => 'HttpException: $message ($statusCode)';
+}
+
+class _AuthExpiredException implements HttpException {
+  const _AuthExpiredException();
+  @override
+  String get message => 'Upstream URL expired';
+  @override
+  Uri? get uri => null;
+
+  @override
+  String toString() => 'HttpException: $message';
 }
 
 class _Piece {
