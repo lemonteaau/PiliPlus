@@ -319,8 +319,14 @@ void main() {
           );
           final (start, end) = range;
           requests.add((request.uri.path, start, end));
-          if (request.uri.path == '/forbidden') {
+          if (request.uri.path == '/forbidden' ||
+              (request.uri.path == '/expiring' && start >= 400000)) {
             response.statusCode = 403;
+            await response.close();
+            return;
+          }
+          if (request.uri.path == '/gone') {
+            response.statusCode = 410;
             await response.close();
             return;
           }
@@ -746,6 +752,54 @@ void main() {
       );
     },
   );
+
+  group('refused URLs', () {
+    late int refused;
+    setUp(() async {
+      proxy.close();
+      refused = 0;
+      proxy = RipperRangeProxy(
+        concurrency: 4,
+        userAgent: 'test',
+        onRefused: () => refused++,
+      );
+      await proxy.start();
+    });
+
+    test('a track every node refuses is reported', () async {
+      final result = await fetch(register(['/forbidden', '/gone']));
+      expect(result.$1.statusCode, 502);
+      expect(refused, 1);
+    });
+
+    test('other failures and a single refusing node are not', () async {
+      expect((await fetch(register(['/wrong']))).$1.statusCode, 502);
+      expect((await fetch(register(['/forbidden', '/good']))).$2, source);
+      expect(refused, 0);
+    });
+
+    test('refusals are reported before the request gives up', () async {
+      // mpv cancels a request by reconnecting after 5 s without data, while
+      // trying every node in turn can take longer.
+      unawaited(
+        fetch(
+          register(['/forbidden', '/gone', '/jam']),
+        ).then((_) {}, onError: (Object _) {}),
+      );
+      await Future<void>.delayed(const Duration(seconds: 1));
+      expect(refused, 1);
+    });
+
+    test('refusals after the headers are reported too', () async {
+      // The deadline passes while the track streams: the head is served, the
+      // pieces after it are refused, and the response is cut short.
+      await expectLater(
+        fetch(register(['/expiring'])),
+        throwsA(isA<HttpException>()),
+      );
+      expect(refused, 1);
+    });
+  });
 
   test('hedge resumes the live primary prefix on a different node', () async {
     final watch = Stopwatch()..start();

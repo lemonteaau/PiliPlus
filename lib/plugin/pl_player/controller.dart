@@ -725,6 +725,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     Volume? volume,
     bool autoFullScreenFlag = false,
     int? rotate,
+    // When the playurls in [dataSource] were fetched, and how to fetch new
+    // ones and reopen at a position; see [_refreshPlayUrlIfStale].
+    DateTime? playUrlFetchedAt,
+    Future<void> Function(Duration position)? refreshPlayUrl,
   }) async {
     try {
       _processing = true;
@@ -734,6 +738,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       this.height = height;
       this.dataSource = dataSource;
       _autoPlay = autoplay;
+      _playUrlFetchedAt = isLive ? null : playUrlFetchedAt;
+      _refreshPlayUrl = refreshPlayUrl;
+      _playUrlRefused = false;
+      _refreshingPlayUrl = false;
       // 初始化数据加载状态
       dataStatus.value = DataStatus.loading;
       // 初始化全屏方向
@@ -797,6 +805,57 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   // stall (upstream ignores waiting while video.seeking); cleared once
   // buffering ends.
   bool _ripperRestarting = false;
+
+  // Playurls carry a `deadline=` two hours after they are fetched; the CDN
+  // then refuses every new request for them. mpv cannot reconnect or seek in
+  // such a track and takes the error as its end: the picture freezes while
+  // the audio plays on, or the other way round. Fetch new ones first.
+  static const _playUrlLifetime = Duration(minutes: 110);
+  DateTime? _playUrlFetchedAt;
+  Future<void> Function(Duration position)? _refreshPlayUrl;
+  bool _playUrlRefused = false;
+  bool _refreshingPlayUrl = false;
+
+  /// Fetches new playurls and reopens at [position] when the current ones
+  /// have expired or the CDN refused them. Returns whether a refresh is
+  /// pending, in which case the caller must not play the old ones.
+  ///
+  /// Paused, the position listeners keep [position] until the reopen. Left
+  /// playing, the buffer covers the fetch and the reopen continues from where
+  /// playback has got to by then.
+  bool _refreshPlayUrlIfStale(Duration position, {bool pause = true}) {
+    final fetchedAt = _playUrlFetchedAt;
+    final refresh = _refreshPlayUrl;
+    if (fetchedAt == null || refresh == null) return false;
+    if (_refreshingPlayUrl) return true;
+    if (!_playUrlRefused &&
+        DateTime.now().difference(fetchedAt) < _playUrlLifetime) {
+      return false;
+    }
+    _refreshingPlayUrl = true;
+    if (pause) _videoPlayerController?.pause();
+    SmartDialog.showToast('播放地址已过期，正在刷新');
+    refresh(position).whenComplete(() => _refreshingPlayUrl = false).ignore();
+    return true;
+  }
+
+  void _onPlayUrlRefused() {
+    final fetchedAt = _playUrlFetchedAt;
+    // URLs fetched minutes ago have not expired, and new ones would only be
+    // refused again.
+    if (fetchedAt == null ||
+        DateTime.now().difference(fetchedAt) < const Duration(minutes: 10)) {
+      return;
+    }
+    _playUrlRefused = true;
+    // When paused, the next play() refreshes.
+    if (playerStatus.isPlaying) {
+      _refreshPlayUrlIfStale(
+        _videoPlayerController?.state.position ?? Duration.zero,
+        pause: false,
+      );
+    }
+  }
 
   String? shadersDirPath;
   Future<String> get copyShadersToExternalDirectory async {
@@ -955,6 +1014,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             ? _ripperAutoConcurrency
             : null,
         userAgent: BrowserUa.pc,
+        onRefused: () {
+          if (generation == _ripperGeneration) _onPlayUrlRefused();
+        },
       );
       _ripperProxy = proxy;
       try {
@@ -1249,6 +1311,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 跳转至指定位置
   Future<void> seekTo(Duration position) async {
     if (_playerCount == 0) return;
+    // A seek outside the buffer needs new requests. When paused, play() does.
+    if (playerStatus.isPlaying && _refreshPlayUrlIfStale(position)) return;
 
     _heartDuration = position.inSeconds;
 
@@ -1288,6 +1352,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (_playerCount == 0) return;
     // 播放时自动隐藏控制条
     if (hideControls) controls = false;
+    if (_refreshPlayUrlIfStale(
+      repeat
+          ? Duration.zero
+          : _videoPlayerController?.state.position ?? Duration.zero,
+    )) {
+      return;
+    }
     // repeat为true，将从头播放
     if (repeat) {
       await seekTo(Duration.zero);
@@ -1440,6 +1511,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   // 双击播放、暂停
   Future<void> onDoubleTapCenter() async {
     if (!isLive && isCompleted) {
+      if (_refreshPlayUrlIfStale(Duration.zero)) return;
       await videoPlayerController!.seek(Duration.zero);
       await videoPlayerController!.play();
     } else if (videoPlayerController!.state.playing) {

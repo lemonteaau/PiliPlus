@@ -18,10 +18,41 @@ class RipperRangeProxy {
     required this.userAgent,
     this.referer = 'https://www.bilibili.com/',
     this.onActiveRequestsChanged,
+    this.onRefused,
   }) : _fixedConcurrency = concurrency,
        assert(concurrency > 0 && concurrency <= 128);
 
   final void Function(int active)? onActiveRequestsChanged;
+
+  /// Nodes refuse (403/410) every request once the signed URLs pass their
+  /// `deadline=`; only new URLs help. mpv reconnects once and takes the error
+  /// as the end of the track: the picture freezes while the audio plays on,
+  /// or the other way round. Called at most every 10 s.
+  final void Function()? onRefused;
+  DateTime? _refusalReportedAt;
+
+  // Reported once two nodes, or every node if the track has fewer, refused
+  // with nothing completed in between. Waiting for a request to fail on
+  // every node takes longer than mpv waits before it reconnects, which
+  // cancels that request. Requiring one of the playurl's own URLs among them
+  // never fired on a device: retries go to the first eight candidates, which
+  // are mostly synthesized mirrors.
+  void _refused(_Track track, Uri url) {
+    String node(Uri url) => '${url.host}:${url.port}${url.path}';
+    final nodes = track.refusedBy..add(node(url));
+    if (_closed ||
+        nodes.length < min(2, track.resolver.urls.map(node).toSet().length)) {
+      return;
+    }
+    final now = DateTime.now();
+    final last = _refusalReportedAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 10)) {
+      return;
+    }
+    _refusalReportedAt = now;
+    onRefused?.call();
+  }
+
   final int _fixedConcurrency;
   final RipperAutoConcurrency? autoConcurrency;
   int get concurrency => autoConcurrency?.threads ?? _fixedConcurrency;
@@ -318,6 +349,7 @@ class RipperRangeProxy {
         throw const HttpException('Truncated CDN Range body');
       }
       completed = true;
+      track.refusedBy.clear();
       _measure(received, clock.elapsed);
       track.resolver.success(url, bytes.length, clock.elapsed);
       final result = BytesBuilder(copy: false);
@@ -326,6 +358,7 @@ class RipperRangeProxy {
       return _Piece(result.takeBytes(), total, url);
     } catch (error) {
       if (receiving != null) resume?.keep(receiving.snapshot());
+      if (status == 403 || status == 410) _refused(track, url);
       if (!job.cancelled) {
         track.resolver.failure(url, status: status, received: received);
         if (status == 412 || status == 429) {
@@ -832,6 +865,8 @@ class _Track {
   int? total;
   _Job? request;
   bool opened = false;
+  // Nodes that refused the track since its last complete piece.
+  final refusedBy = <String>{};
 }
 
 class _Piece {
